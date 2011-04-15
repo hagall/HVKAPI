@@ -1,6 +1,6 @@
 <?php	
 	require 'HVKAPI.php';	
-	$VK = new vkapi();
+	$VK = new hvkapi();
 	$res = $VK->login('email', 'pass');
 	if ($res['errcode']) die("Error code: {$res['errcode']}. {$res['errdesc']}");
 	
