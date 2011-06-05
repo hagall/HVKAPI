@@ -23,8 +23,9 @@ use utf8;
 use Digest::MD5 qw(md5 md5_hex);
 use LWP::Simple;
 use HTTP::Cookies;
-use JSON;
 use Data::Dumper;
+use JSON;
+use Encode qw(encode_utf8);
 
 use constant {
 	ERROR_CAPTCHA => 666,
@@ -32,9 +33,11 @@ use constant {
 	ERROR_LOGIN    => 101,
 };
 
-our $VERSION = '0.01';
-our $appId = 2248585;
-our $appSettings = '16383';
+our $VERSION = '0.2';
+our $appId = 2248585;					# ID дефолтного приложения
+our $appSettings = '16383';				# Права, которые оно получает. Максимальные.	
+our $defaultAgent = 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10';
+our $defaultApiUrl = 'http://api.vkontakte.ru/api.php'; # URL для API-запросов
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(ERROR_CAPTCHA ERROR_SECURITY ERROR_LOGIN);
@@ -48,15 +51,40 @@ sub new {
 	my $self  = {};
 	bless( $self, $class );
 
-	($self->{api_id}, $self->{app_settings}, $self->{useragent}) = @_;
-	$self->{useragent} || ($self->{useragent} = 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10');
+	($self->{api_id}, $self->{useragent}) = @_;
+	$self->{useragent} || ($self->{useragent} = $defaultAgent);
 	$self->{api_id} || ($self->{api_id} = $appId);
-	$self->{app_settings} || ($self->{app_settings} = $appSettings);
+	$self->{app_settings} = $appSettings;
 	
 	
-	$self->{api_url} = 'http://api.vkontakte.ru/api.php';
+	$self->{api_url} = $defaultApiUrl;
 	return $self;
 }
+
+
+#-----------------------------------------------------------------------------------------
+#							Восстановление сессии
+#							Rev1, 110410
+sub restoreSession
+{
+	my ($self, $sid, $mid, $secret) = @_;
+	$self->{sid} = $sid;
+	$self->{secret} = $secret;
+	$self->{mid} = $mid;
+	return 0;
+}
+
+
+#-----------------------------------------------------------------------------------------
+#							Получение параметров сессии
+#							Rev1, 110410
+sub getSessionVars
+{
+	my $self = shift;
+	
+	return { "sid" => $self->{sid}, "mid" => $self->{mid}, "secret" => $self->{secret} };
+}
+
 #-----------------------------------------------------------------------------------------
 #							Логин в API без компонента
 #							Rev1, 110327
@@ -76,10 +104,12 @@ sub login
 	
 							# Получаем app_hash
 	my $response = $browser->get("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings");
+
 	return ('errcode' => 100, 
 	        'errdesc' => 'Cannot parse app_hash!') unless ($response->content =~ /name="app_hash" value="(\w+)"/);
 
 	$self->{app_hash} = $1;	
+	$self->{captcha_callback} = $captchaCallback;
 	
 							# Проверяем на капчу
 	
@@ -150,11 +180,13 @@ sub login
 	$self->{secret} = ($rurl =~ /"secret":"(\w+)"/)[0];
 	return ('errcode' => 107, 
 	        'errdesc' => "Error parsing params (mid, sid, secret)!") unless ($self->{mid} && $self->{sid} && $self->{secret});
-	
+	        
 	return ('errcode' => 0, 
 	        'errdesc' => '', 
 	        'mid' => $self->{mid});
 }
+
+
 #-----------------------------------------------------------------------------------------
 #							Запрос к контакту с обработкой
 #							капчи. Используется только в 
@@ -186,15 +218,18 @@ sub _postWithCaptcha
 	}
 	
 	return $response;
-}	
+}
+
+	
 #-----------------------------------------------------------------------------------------
 #							Запрос к API
 #							Rev1, 110327
 sub request {
-	my $self   = shift;
-	my $method = $_[0];
-
-	my $params = $_[1];
+	my ($self, $method, $cparams) = @_;
+	#my $method = $_[0];
+	#my $params = $_[1];
+	my $params;
+	%$params = %$cparams;
 
 	$params->{'api_id'}    = $self->{'api_id'};
 	$params->{'v'}         = '3.0';
@@ -217,9 +252,32 @@ sub request {
 	my $response = $browser->post($self->{'api_url'}, $params);
 	utf8::encode($response->content);
 	
+	my $result;
+							# А вдруг не выйдет?
+	unless (eval { $result = decode_json($response->content) })
+	{
+		$result->{error}->{error_code} = 555; 
+		$result->{error}->{error_desc} = $response->content;
+		return $result;
+	}
+	
+							# Captcha is needed.
+	if ($result->{error}->{error_code} and $result->{error}->{error_code} == 14)
+	{
+		my $callback = $self->{captcha_callback};
+		my $answer = &$callback({ "captcha_url" => $result->{error}->{captcha_img},
+		                          "captcha_sid" => $result->{error}->{captcha_sid}
+		                        });
+		$cparams->{captcha_sid} = $result->{error}->{captcha_sid};
+		$cparams->{captcha_key} = $answer;
+	        return $self->request($method, $cparams);
+	}
+	
 							# Декодировка
-	return decode_json($response->content);
+	return $result;
 }
+
+
 #-----------------------------------------------------------------------------------------
 #							urlencode и urldecode
 #							Rev1, 110327
