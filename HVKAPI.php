@@ -15,6 +15,8 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# Version 0.2 (Rev2, 110605)
+
 define('DEFAULT_APP', 2248585);
 define('DEFAULT_AGENT', 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10');
 define('API_URL', "http://api.vkontakte.ru/api.php");
@@ -48,6 +50,8 @@ class hvkapi {
 		$result['errdesc'] = 0;		
 
 		$app_id = $this->app_id;
+		$this->captcha_callback = $captchaCallback;
+		
 		$app_settings = REQUESTING_SETTINGS;
 									# Получаем app_hash		
 		$res = file_get_contents("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings");
@@ -188,7 +192,19 @@ class hvkapi {
 		$query = API_URL.'?'.$this->params($params);
 		$res = file_get_contents($query);
 		
-		return json_decode($res, true);
+		$jsond = json_decode($res, true);
+		if (array_key_exists("error", $jsond) && $jsond['error']['error_code'] == 14)
+		{
+			$callback = $this->captchaCallback;
+			$cparams = array();
+			$cparams['captcha_url'] = $jsond['error']['captcha_img'];
+			$cparams['captcha_sid'] = $jsond['error']['captcha_sid'];
+			
+			$params['captcha_sid'] = $jsond['error']['captcha_sid'];
+			$params['captcha_key'] = call_user_func($callback, $cparams);
+			return request($method, $params);
+		}
+		return $jsond;
 	}
 #---------------------------------------------------------------------------------------------------------	
 									# Хуита для слияния параметров
