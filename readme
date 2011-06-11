@@ -8,8 +8,8 @@ DESCRIPTION
 
 HVKAPI is the module for using Vkontakte.ru API  in Perl and PHP languages,
 which don't support (by default necessary) visual components. To use it you
-don't need any experience in web technologies or something like. You just create
-an object, do login and perform requests. 
+don't need any experience in web technologies or something similar. All you need 
+to do is create an object, log in and make requests.
 
 From version 0.3 HVKAPI supports browser-like HTTP requests (through 
 LWP::UserAgent object) besides dealing with API directly. Captcha handling is 
@@ -71,6 +71,16 @@ API request itself.
 
 Returns a hash or associative array (in Perl/PHP). Check userapi.com for more. 
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+interface()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+LWP::UserAgent object for HTTP requests (from 0.3 only!)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+postWithCaptcha
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Just a POST-request through the LWP::UserAgent object with captcha processing. 
+(from 0.3 only!)
 
 CONSTANTS AND DEFAULT VALUES
 --------------------------------------------------------------------------------
