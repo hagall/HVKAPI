@@ -33,8 +33,8 @@ use constant {
 	ERROR_LOGIN    => 101,
 };
 
-our $VERSION = '0.2';
-our $appId = 2248585;					# ID дефолтного приложения
+our $VERSION = '0.3';
+our $appId = 2256065;					# ID дефолтного приложения
 our $appSettings = '16383';				# Права, которые оно получает. Максимальные.	
 our $defaultAgent = 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10';
 our $defaultApiUrl = 'http://api.vkontakte.ru/api.php'; # URL для API-запросов
@@ -45,13 +45,13 @@ our %EXPORT_TAGS = (types => [qw(ERROR_CAPTCHA ERROR_SECURITY ERROR_LOGIN)]);
 
 #-----------------------------------------------------------------------------------------
 #							Конструктор класса.
-#							Rev1, 110327
+#							Rev2, 110605
 sub new {
 	my $class = shift;
 	my $self  = {};
 	bless( $self, $class );
 
-	($self->{api_id}, $self->{useragent}) = @_;
+	($self->{captcha_callback}, $self->{api_id}, $self->{useragent}) = @_;
 	$self->{useragent} || ($self->{useragent} = $defaultAgent);
 	$self->{api_id} || ($self->{api_id} = $appId);
 	$self->{app_settings} = $appSettings;
@@ -59,6 +59,17 @@ sub new {
 	
 	$self->{api_url} = $defaultApiUrl;
 	return $self;
+}
+
+
+#-----------------------------------------------------------------------------------------
+#							Задаём callback для капчи
+#							Rev1, 110605
+sub setCallback
+{
+	my ($self, $callback) = @_;
+	$self->{captcha_callback} = $callback;
+	return $callback;
 }
 
 
@@ -92,11 +103,14 @@ sub login
 {
 	my $self = shift;
 
-	my ($ulogin, $upass, $captchaCallback) = @_;		
+	my ($ulogin, $upass) = @_;		
 	
 	my ($app_id, $app_settings) = ($self->{api_id}, $self->{app_settings});
 	my $login = _encurl($ulogin);
 	my $pass = _encurl($upass);
+	
+	my $captchaCallback = $self->{captcha_callback};
+	#$self->{captcha_callback} = $captchaCallback if ($captchaCallback);
 	
 	my $browser = LWP::UserAgent->new();
 	
@@ -113,7 +127,7 @@ sub login
 	
 							# Проверяем на капчу
 	
-	$response = _postWithCaptcha($browser, "http://vkontakte.ru/login.php", {"op" => "a_login_attempt"}, $captchaCallback);
+	$response = $self->postWithCaptcha($browser, "http://vkontakte.ru/login.php", {"op" => "a_login_attempt"});
 
 							# Получаем переменную s							
 	$response = $browser->get("http://login.vk.com/?act=login&pass=$pass&email=$login&app_hash=$1&permanent=1&vk=");
@@ -152,7 +166,7 @@ sub login
 		                                                                         $self->{secret});
 
 	                				# Сохраняем настройки приложения     
-		$response = _postWithCaptcha($browser, "http://vk.com/apps.php?act=a_save_settings", 
+		$response = $self->postWithCaptcha($browser, "http://vk.com/apps.php?act=a_save_settings", 
 											{"addMember" => "1",
 		                                                                	"app_settings_32" => "1",
 		                                                                	"app_settings_64" => "1",
@@ -164,9 +178,11 @@ sub login
 		                                                                	"app_settings_8192" => "1",
 		                                                                	"app_settings_4096" => "1",
 		                                                                	"hash" => $app_settings_hash,
-		                                                                	"id" => $app_id}, $captchaCallback);
+		                                                                	"id" => $app_id});
    		
  		return ('errcode' => 666, 'errdesc' => 'Captcha has been encountered!') unless defined $response;
+ 		
+ 		$self->{browser} = $browser;
  		
 		return ('errcode' => 0, 'errdesc' => '', 'mid' => $self->{mid});
 	}
@@ -180,10 +196,21 @@ sub login
 	$self->{secret} = ($rurl =~ /"secret":"(\w+)"/)[0];
 	return ('errcode' => 107, 
 	        'errdesc' => "Error parsing params (mid, sid, secret)!") unless ($self->{mid} && $self->{sid} && $self->{secret});
-	        
+	
+	$self->{browser} = $browser;
 	return ('errcode' => 0, 
 	        'errdesc' => '', 
 	        'mid' => $self->{mid});
+}
+
+
+#-----------------------------------------------------------------------------------------
+#							Получения ссылки на объект-браузер
+#							Rev1, 110605
+sub interface
+{
+	my $self = shift;
+	return $self->{browser};
 }
 
 
@@ -193,13 +220,14 @@ sub login
 #							логине
 #							Rev1, 110331
 #	
-sub _postWithCaptcha
+sub postWithCaptcha
 {
-	my ($browser, $link, $post, $callback) = @_;
+	my ($self, $browser, $link, $post) = @_;
 	
 	bless $browser, "LWP::UserAgent";
 	
 	my $response = $browser->post($link, $post);
+	my $callback = $self->{captcha_callback};
 	
 	while ($response->content =~ /captcha_sid/)
 	{

@@ -17,7 +17,7 @@
 
 # Version 0.2 (Rev2, 110605)
 
-define('DEFAULT_APP', 2248585);
+define('DEFAULT_APP', 2256065);
 define('DEFAULT_AGENT', 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10');
 define('API_URL', "http://api.vkontakte.ru/api.php");
 define('REQUESTING_SETTINGS', 16383);
@@ -36,21 +36,22 @@ class hvkapi {
 #---------------------------------------------------------------------------------------------------------	
 									# Конструктор класса
 									# Rev1, 110331
-	function hvkapi($app_id = DEFAULT_APP) 
+	function hvkapi($captchaCallback = '', $app_id = DEFAULT_APP) 
 	{
+		$this->captcha_callback = $captchaCallback;
 		$this->app_id = $app_id;
 	}
 #---------------------------------------------------------------------------------------------------------	
 									# Логин в контакте через API
 									# Rev1, 110331	
-	function Login($email, $password, $captchaCallback = '')
+	function Login($email, $password)
 	{
 		$result = array();
 		$result['errcode'] = 0;
 		$result['errdesc'] = 0;		
 
 		$app_id = $this->app_id;
-		$this->captcha_callback = $captchaCallback;
+		$captchaCallback = $this->captcha_callback;
 		
 		$app_settings = REQUESTING_SETTINGS;
 									# Получаем app_hash		
