@@ -66,10 +66,10 @@ request (method, params)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 API request itself. 
  - method (string) - method's name (check userapi.com)
- - params - hash or associative array (in Perl/PHP), containing method's 
-            parameters.
+ - params - hash or associative array (in Perl/PHP), contains parameters of the
+            method.
 
-Returns a hash or an associative array (in Perl/PHP). Check userapi.com for
+Returns a hash or an associative array (in Perl/PHP). Look userapi.com for
 details.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
