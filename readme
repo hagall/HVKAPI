@@ -6,15 +6,15 @@ HVKAPI 0.3 README FILE
 DESCRIPTION
 --------------------------------------------------------------------------------
 
-HVKAPI is the module for using Vkontakte.ru API  in Perl and PHP languages,
+HVKAPI is the module for using Vkontakte.ru API in Perl and PHP languages,
 which don't support (by default necessary) visual components. To use it you
 don't need any experience in web technologies or something similar. All you need 
-to do is create an object, log in and make requests.
+to do is to create an object, log in and make requests.
 
-From version 0.3 HVKAPI supports browser-like HTTP requests (through 
+Since version 0.3 HVKAPI supports browser-like HTTP requests (through 
 LWP::UserAgent object) besides dealing with API directly. Captcha handling is 
 also available in these requests, but keep in mind that VK can change it's 
-layout (as well as login algorythm) at any moment. This can break down login 
+layout (as well as a login algorythm) at any moment. It can break down login 
 function or "captcha-catch" methods.
 
 
@@ -30,7 +30,7 @@ methods:
 new (appid, useragent, captchaCallback)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Class constructor. 
- - appid (int)- id of your desktop application (you must create it first). 
+ - appid (int)- id of your desktop application (you must create it at first). 
                 if omitted, default id will be used. 
  - UserAgent (string)- obvious. if omitted, default value will be used. 
  - captchaCallback (pointer) - callback-function to deal with captcha. 
@@ -41,7 +41,7 @@ setCallback (callbackFunc)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Changes a captcha-callback function to callbackFunc. Your callback receives an
 associative array (in PHP) or a hash (in Perl) with these fields:
-	difficult - so called difficulcy (field "s" in the address)
+	difficult - so called difficulty (field "s" in the address)
 	captcha_sid - captcha sid 
 	captcha_url - captcha image link, for example, 
 			http://vkontakte.ru/captcha.php?sid=1234567890&s=0
@@ -54,11 +54,11 @@ Login function, parameters are quite obvious. Function returns a hash (in Perl)
 or associative array (in PHP) with these keys: 
 	errcode - error code
 	errdesc - error description
-In case of success errcode = 0. Possible error codes are: 
+If succeed, errcode = 0. Possible error codes are: 
 	101 (ERROR_LOGIN) - incorrect login data
 	102 (ERROR_SECURITY) - security check
-	666 (ERROR_CAPTCHA) - captcha has been encountered 
-			      (and you didn't set callback)
+	666 (ERROR_CAPTCHA) - the captcha appeared
+			      (and you haven't set callback)
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -69,21 +69,22 @@ API request itself.
  - params - hash or associative array (in Perl/PHP), containing method's 
             parameters.
 
-Returns a hash or associative array (in Perl/PHP). Check userapi.com for more. 
+Returns a hash or an associative array (in Perl/PHP). Check userapi.com for
+details.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 interface()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-LWP::UserAgent object for HTTP requests (from 0.3 only!)
+LWP::UserAgent object for HTTP requests (since 0.3 only!)
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-postWithCaptcha
+postWithCaptcha(...)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Just a POST-request through the LWP::UserAgent object with captcha processing. 
-(from 0.3 only!)
+(since 0.3 only!)
 
 CONSTANTS AND DEFAULT VALUES
 --------------------------------------------------------------------------------
 
-Located at the beginning of the module and are well-documented. You can change
-a default application id, UserAgent and something more. 
+Located at the beginning of the module and well-documented. You can change
+a default application id, UserAgent and something else.
