@@ -30,7 +30,6 @@ methods:
 new (appid, useragent, captchaCallback)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Class constructor. 
-Конструктор класса. 
  - appid (int)- id of your desktop application (you must create it first). 
                 if omitted, default id will be used. 
  - UserAgent (string)- obvious. if omitted, default value will be used. 
