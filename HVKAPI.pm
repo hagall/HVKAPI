@@ -33,7 +33,7 @@ use constant {
 	ERROR_LOGIN    => 101,
 };
 
-our $VERSION = '0.3';
+our $VERSION = '0.4';
 our $appId = 2256065;					# ID дефолтного приложения
 our $appSettings = '16383';				# Права, которые оно получает. Максимальные.	
 our $defaultAgent = 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10';
@@ -98,7 +98,7 @@ sub getSessionVars
 
 #-----------------------------------------------------------------------------------------
 #							Логин в API без компонента
-#							Rev1, 110327
+#							Rev2, 110630
 sub login
 {
 	my $self = shift;
@@ -117,14 +117,15 @@ sub login
 	$browser->agent($self->{useragent});
 	
 							# Получаем app_hash
-	my $response = $browser->get("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings");
+	my $response = $browser->get("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings&permanent=1");
 
 	return ('errcode' => 100, 
 	        'errdesc' => 'Cannot parse app_hash!') unless ($response->content =~ /name="app_hash" value="(\w+)"/);
 
 	$self->{app_hash} = $1;	
 	$self->{captcha_callback} = $captchaCallback;
-	
+							# Жмём "разрешить авторизоваться от вашего имени"
+
 							# Проверяем на капчу
 	
 	$response = $self->postWithCaptcha($browser, "http://vkontakte.ru/login.php", {"op" => "a_login_attempt"});
@@ -132,7 +133,7 @@ sub login
 							# Получаем переменную s							
 	$response = $browser->get("http://login.vk.com/?act=login&pass=$pass&email=$login&app_hash=$1&permanent=1&vk=");
 	return ('errcode' => 101, 
-	        'errdesc' => 'Incorrect login data!') unless ($response->content =~/name='s' value='(\w+)'/);
+	        'errdesc' => 'Incorrect login data!') unless ($response->content =~/'sid', '(\w+)'/);
 	
 	$self->{sid} = $1;
 
