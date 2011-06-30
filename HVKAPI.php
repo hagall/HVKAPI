@@ -43,7 +43,7 @@ class hvkapi {
 	}
 #---------------------------------------------------------------------------------------------------------	
 									# Логин в контакте через API
-									# Rev1, 110331	
+									# Rev2, 110630
 	function Login($email, $password)
 	{
 		$result = array();
@@ -72,7 +72,7 @@ class hvkapi {
 		$res = $this->_request("login.vk.com", "http://login.vk.com/", '', 
 		                       "act=login&pass=".urlencode($password)."&email=".urlencode($email)."&app_hash=$app_hash&al_test=14&permanent=1");
 
-		if (!preg_match("#name='s' value='(\w+)'#", $res['content'], $found))
+		if (!preg_match("#'sid', '(\w+)'#", $res['content'], $found))
 		{
 			$result['errcode'] = 101;
 			$result['errdesc'] = 'Incorrect login data!';
