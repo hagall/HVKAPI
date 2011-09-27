@@ -33,7 +33,7 @@ use constant {
 	ERROR_LOGIN    => 101,
 };
 
-our $VERSION = '0.4';
+our $VERSION = '0.3.1';
 our $appId = 2256065;					# ID дефолтного приложения
 our $appSettings = '16383';				# Права, которые оно получает. Максимальные.	
 our $defaultAgent = 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10';
@@ -98,7 +98,7 @@ sub getSessionVars
 
 #-----------------------------------------------------------------------------------------
 #							Логин в API без компонента
-#							Rev2, 110630
+#							Rev4, 110721
 sub login
 {
 	my $self = shift;
@@ -130,20 +130,19 @@ sub login
 	
 	$response = $self->postWithCaptcha($browser, "http://vkontakte.ru/login.php", {"op" => "a_login_attempt"});
 
-							# Получаем переменную s							
-	$response = $browser->get("http://login.vk.com/?act=login&pass=$pass&email=$login&app_hash=$1&permanent=1&vk=");
-	return ('errcode' => 101, 
-	        'errdesc' => 'Incorrect login data!') unless ($response->content =~/'sid', '(\w+)'/);
-	
-	$self->{sid} = $1;
-
-							# Получаем параметры сессии и подтверждение настроек
+							# Стандартный логин
 	my $cookie = HTTP::Cookies->new();
-	$cookie->set_cookie(1, 'remixsid', $1, '/', 'vkontakte.ru');
-	$cookie->set_cookie(1, 'remixsid', $1, '/', 'vk.com');
-	$browser->cookie_jar($cookie);
-	$response = $browser->get("http://vkontakte.ru/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings");	
+	$browser->cookie_jar($cookie);	
+	$response = $browser->get("http://login.vk.com/?act=login&pass=$pass&email=$login&app_hash=$1&permanent=1&vk=&from_host=vk.com");
 	
+
+	return ('errcode' => 101, 
+	        'errdesc' => 'Incorrect login data!') if ($response->previous->header("Location") =~ /login\.php\?m=1/);
+	
+
+							# Получаем параметры сессии и подтверждение настроек							
+	$response = $browser->get("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings");
+
 	unless ($response->content =~ /Login success/)
 	{
 		return ('errcode' => 102, 'errdesc' => 'Holy shit! Security check!') if ($response->content =~ /security_check/);
@@ -156,17 +155,9 @@ sub login
 		$response = $browser->post("http://vk.com/login.php", {'act' => 'a_auth',
 		                                                       'app' => $app_id,
 		                                                       'hash' => $auth_hash,
-		                                                       'permanent' => '1'});
-		                                                                          
-		$self->{mid} = ($response->content =~ /"mid":(\d+)/)[0];		
-		$self->{sid} = ($response->content =~ /"sid":"(\w+)"/)[0];
-		$self->{secret} = ($response->content =~ /"secret":"(\w+)"/)[0];
-		return ('errcode' => 105, 
-		        'errdesc' => "Error parsing params (mid, sid, secret)!") unless ($self->{mid} && 
-		                                                                         $self->{sid} && 
-		                                                                         $self->{secret});
+		                                                       'permanent' => '1'});		                                                       
 
-	                				# Сохраняем настройки приложения     
+	                				# Сохраняем настройки приложения                                        
 		$response = $self->postWithCaptcha($browser, "http://vk.com/apps.php?act=a_save_settings", 
 											{"addMember" => "1",
 		                                                                	"app_settings_32" => "1",
@@ -176,12 +167,27 @@ sub login
 		                                                                	"app_settings_512" => "1",
 		                                                                	"app_settings_1024" => "1",
 		                                                                	"app_settings_2048" => "1",
+
 		                                                                	"app_settings_8192" => "1",
 		                                                                	"app_settings_4096" => "1",
 		                                                                	"hash" => $app_settings_hash,
 		                                                                	"id" => $app_id});
    		
  		return ('errcode' => 666, 'errdesc' => 'Captcha has been encountered!') unless defined $response;
+                
+                
+		$response = $browser->post("http://vk.com/login.php", {'act' => 'a_auth',
+		                                                       'app' => $app_id,
+		                                                       'hash' => $auth_hash,
+		                                                       'permanent' => '1'});
+                                              
+		$self->{mid} = ($response->content =~ /"mid":(\d+)/)[0];		
+		$self->{sid} = ($response->content =~ /"sid":"(\w+)"/)[0];
+		$self->{secret} = ($response->content =~ /"secret":"(\w+)"/)[0];
+		return ('errcode' => 105, 
+		        'errdesc' => "Error parsing params (mid, sid, secret)!") unless ($self->{mid} && 
+		                                                                         $self->{sid} && 
+		                                                                         $self->{secret});
  		
  		$self->{browser} = $browser;
  		
@@ -240,7 +246,7 @@ sub postWithCaptcha
 		$cdata->{'difficult'} = 0 unless ($cdata->{'difficult'});
 		
 		my $diff = abs (int $cdata->{'difficult'} - 1);
-		$cdata->{'captcha_url'} = "http://vkontakte.ru/captcha.php?sid=$sid&s=$diff";
+		$cdata->{'captcha_url'} = "http://vk.com/captcha.php?sid=$sid&s=$diff";
 		$post->{'captcha_sid'} = $cdata->{'captcha_sid'};
 		$post->{'captcha_key'} = &$callback($cdata);
 		$response = $browser->post($link, $post);
@@ -323,6 +329,17 @@ sub _decurl
 	my $url = shift;
 	$url =~ s/\%([A-Fa-f0-9]{2})/pack('C', hex($1))/seg;
 	return $url;
+}
+
+
+#-----------------------------------------------------------------------------------------
+#							Получение/замена объекта "Браузер"
+#							Rev1, 110701
+sub browser
+{
+	my ($self, $browser) = shift;
+	defined $browser ? ($self->{browser} = $browser) : ($browser = $self->{browser});
+	return $browser;
 }
 
 1;   
