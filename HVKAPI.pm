@@ -1,7 +1,7 @@
 package HVKAPI;
 
 #    HVKAPI - class for vkontakte.ru API
-#    Copyright (C) 2011 Hagall (asbrandr@jabber.ru)
+#    Copyright (C) 2011-2012 Hagall (asbrandr@jabber.ru)
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -15,33 +15,27 @@ package HVKAPI;
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#    Rev4, 111128
 
 use warnings;
 use strict;
 use utf8;
 
-use Digest::MD5 qw(md5 md5_hex);
 use LWP::Simple;
+use LWP::Protocol::https;
 use HTTP::Cookies;
 use Data::Dumper;
 use JSON;
 use Encode qw(encode_utf8);
 
-use constant {
-	ERROR_CAPTCHA => 666,
-	ERROR_SECURITY => 102,
-	ERROR_LOGIN    => 101,
-};
 
-our $VERSION = '0.3.1';
+our $VERSION = '1.0';
 our $appId = 2256065;					# ID дефолтного приложения
-our $appSettings = '16383';				# Права, которые оно получает. Максимальные.	
-our $defaultAgent = 'Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.12) Gecko/20101027 Ubuntu/10.10';
-our $defaultApiUrl = 'http://api.vkontakte.ru/api.php'; # URL для API-запросов
+our $appSettings = 'friends,photos,audio,video,docs,notes,pages,wall,groups,messages';
+our $defaultAgent = 'Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1';
+our $defaultApiUrl = 'http://api.vk.com/api.php'; # URL для API-запросов
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(ERROR_CAPTCHA ERROR_SECURITY ERROR_LOGIN);
-our %EXPORT_TAGS = (types => [qw(ERROR_CAPTCHA ERROR_SECURITY ERROR_LOGIN)]);
 
 #-----------------------------------------------------------------------------------------
 #							Конструктор класса.
@@ -55,8 +49,8 @@ sub new {
 	$self->{useragent} || ($self->{useragent} = $defaultAgent);
 	$self->{api_id} || ($self->{api_id} = $appId);
 	$self->{app_settings} = $appSettings;
-	
-	
+
+
 	$self->{api_url} = $defaultApiUrl;
 	return $self;
 }
@@ -75,139 +69,166 @@ sub setCallback
 
 #-----------------------------------------------------------------------------------------
 #							Восстановление сессии
-#							Rev1, 110410
+#							Rev2, 120121
 sub restoreSession
 {
-	my ($self, $sid, $mid, $secret) = @_;
-	$self->{sid} = $sid;
-	$self->{secret} = $secret;
-	$self->{mid} = $mid;
+	my $self = shift;
+	($self->{access_token}, $self->{mid}) = @_;
+	$self->{browser} = new LWP::UserAgent(agent => $self->{useragent});
 	return 0;
 }
 
 
 #-----------------------------------------------------------------------------------------
 #							Получение параметров сессии
-#							Rev1, 110410
+#							Rev2, 120121
 sub getSessionVars
 {
 	my $self = shift;
-	
-	return { "sid" => $self->{sid}, "mid" => $self->{mid}, "secret" => $self->{secret} };
+	return { "access_token" => $self->{access_token}, "mid" => $self->{mid} };
 }
 
 #-----------------------------------------------------------------------------------------
 #							Логин в API без компонента
-#							Rev4, 110721
+#							Rev5, 120121
 sub login
 {
 	my $self = shift;
 
-	my ($ulogin, $upass) = @_;		
-	
-	my ($app_id, $app_settings) = ($self->{api_id}, $self->{app_settings});
-	my $login = _encurl($ulogin);
-	my $pass = _encurl($upass);
-	
-	my $captchaCallback = $self->{captcha_callback};
-	#$self->{captcha_callback} = $captchaCallback if ($captchaCallback);
-	
-	my $browser = LWP::UserAgent->new();
-	
+	my ($ulogin, $upass, $mphone) = @_;
+
+	my ($app_id, $app_settings) 			= ($self->{api_id}, $self->{app_settings});
+	my $captchaCallback 				= $self->{captcha_callback};
+
+	($self->{mid}, $self->{access_token})		= (0, 0);
+	$self->{browser} 				= LWP::UserAgent->new();
+
+	my $browser 					= $self->{browser};
 	$browser->agent($self->{useragent});
-	
-							# Получаем app_hash
-	my $response = $browser->get("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings&permanent=1");
+	$browser->cookie_jar(new HTTP::Cookies());
+	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
+	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
+	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
 
-	return ('errcode' => 100, 
-	        'errdesc' => 'Cannot parse app_hash!') unless ($response->content =~ /name="app_hash" value="(\w+)"/);
+	my $response 					= $browser->get("http://oauth.vk.com/oauth/authorize?client_id=$appId".
+									"&scope=$appSettings".
+									"&display=wap&response_type=token");
 
-	$self->{app_hash} = $1;	
-	$self->{captcha_callback} = $captchaCallback;
-							# Жмём "разрешить авторизоваться от вашего имени"
+	my ($ip_h) 					= $response->decoded_content() =~ /name="ip_h" value="(\w+)"/;
+	my ($to_link) 					= $response->decoded_content() =~ /name="to" value="([\w\/]+)"/;
 
-							# Проверяем на капчу
-	
-	$response = $self->postWithCaptcha($browser, "http://vkontakte.ru/login.php", {"op" => "a_login_attempt"});
 
-							# Стандартный логин
-	my $cookie = HTTP::Cookies->new();
-	$browser->cookie_jar($cookie);	
-	$response = $browser->get("http://login.vk.com/?act=login&pass=$pass&email=$login&app_hash=$1&permanent=1&vk=&from_host=vk.com");
-	
+	return ('errcode' => 100,
+	        'errdesc' => 'Cannot parse initial parameters!') unless ($ip_h && $to_link);
 
-	return ('errcode' => 101, 
-	        'errdesc' => 'Incorrect login data!') if ($response->previous->header("Location") =~ /login\.php\?m=1/);
-	
+	my ($captcha_sid, $captcha_key);
 
-							# Получаем параметры сессии и подтверждение настроек							
-	$response = $browser->get("http://vk.com/login.php?app=$app_id&layout=popup&type=browser&settings=$app_settings");
-
-	unless ($response->content =~ /Login success/)
+	do
 	{
-		return ('errcode' => 102, 'errdesc' => 'Holy shit! Security check!') if ($response->content =~ /security_check/);
-		return ('errcode' => 103, 'errdesc' => 'Cannot parse settings hash!') unless ($response->content =~ /app_settings_hash = '(\w+)'/);
-		my $app_settings_hash = $1;
-		return ('errcode' => 104, 'errdesc' => 'Cannot parse auth hash!') unless ($response->content =~ /auth_hash = '(\w+)'/);
-		my $auth_hash = $1;
-		
-							# Логинимся (a_auth) с этим хешем	
-		$response = $browser->post("http://vk.com/login.php", {'act' => 'a_auth',
-		                                                       'app' => $app_id,
-		                                                       'hash' => $auth_hash,
-		                                                       'permanent' => '1'});		                                                       
+											# Обрабатываем капчу
+											# с прошлого цикла
+		if ($captcha_sid)
+		{
+			my $cdata 			= {'captcha_url' => "http://vk.com/captcha.php?sid=$captcha_sid&dif=0",
+							   'captcha_sid' => $captcha_sid,
+							   'difficulty'  => 0
+							  };
+			my $callback = $self->{captcha_callback};
+			$captcha_key = &$callback($cdata);
 
-	                				# Сохраняем настройки приложения                                        
-		$response = $self->postWithCaptcha($browser, "http://vk.com/apps.php?act=a_save_settings", 
-											{"addMember" => "1",
-		                                                                	"app_settings_32" => "1",
-		                                                                	"app_settings_64" => "1",
-		                                                               	 	"app_settings_128" => "1",
-		                                                               	 	"app_settings_256" => "1",
-		                                                                	"app_settings_512" => "1",
-		                                                                	"app_settings_1024" => "1",
-		                                                                	"app_settings_2048" => "1",
+			return ('errcode' => 666,
+				'errdesc' => 'Holy shit! The captcha and no callback!') unless defined $captcha_key;
+		}
 
-		                                                                	"app_settings_8192" => "1",
-		                                                                	"app_settings_4096" => "1",
-		                                                                	"hash" => $app_settings_hash,
-		                                                                	"id" => $app_id});
-   		
- 		return ('errcode' => 666, 'errdesc' => 'Captcha has been encountered!') unless defined $response;
-                
-                
-		$response = $browser->post("http://vk.com/login.php", {'act' => 'a_auth',
-		                                                       'app' => $app_id,
-		                                                       'hash' => $auth_hash,
-		                                                       'permanent' => '1'});
-                                              
-		$self->{mid} = ($response->content =~ /"mid":(\d+)/)[0];		
-		$self->{sid} = ($response->content =~ /"sid":"(\w+)"/)[0];
-		$self->{secret} = ($response->content =~ /"secret":"(\w+)"/)[0];
-		return ('errcode' => 105, 
-		        'errdesc' => "Error parsing params (mid, sid, secret)!") unless ($self->{mid} && 
-		                                                                         $self->{sid} && 
-		                                                                         $self->{secret});
- 		
- 		$self->{browser} = $browser;
- 		
-		return ('errcode' => 0, 'errdesc' => '', 'mid' => $self->{mid});
+		$response				= $browser->post("https://login.vk.com/?act=login&soft=1&utf8=1",
+										{"q"			=> 1,
+										 "from_host" 		=> "oauth.vk.com",
+										 "from_protocol" 	=> "http",
+										 "ip_h" 		=> $ip_h,
+										 "to" 			=> $to_link,
+										 "email" 		=> $ulogin,
+										 "pass" 		=> $upass,
+										 "act"			=> "login",
+										 "soft"			=> 1,
+										 "utf8"			=> 1,
+										 "captcha_sid"		=> $captcha_sid,
+										 "captcha_key"		=> $captcha_key
+										});
+
+		my $old_location 			= $response->header('Location');
+
+		$response 				= $browser->get($response->header('Location'))
+								if ($response->header('Location'));
+
+		($captcha_sid)				= $response->decoded_content() =~ /name="captcha_sid" value="(\d+)"/;
+
 	}
-	return ('errcode' => 106, 
-	        'errdesc' => "Server didn't return correct redirect or settings hash page!") unless ($response->previous->is_redirect);
-	
-							# Декодируем mid, secret и т.д.
-	my $rurl = _decurl($response->request->url);
-	$self->{mid} = ($rurl =~ /"mid":(\d+)/)[0];
-	$self->{sid} = ($rurl =~ /"sid":"(\w+)"/)[0];
-	$self->{secret} = ($rurl =~ /"secret":"(\w+)"/)[0];
-	return ('errcode' => 107, 
-	        'errdesc' => "Error parsing params (mid, sid, secret)!") unless ($self->{mid} && $self->{sid} && $self->{secret});
-	
-	$self->{browser} = $browser;
-	return ('errcode' => 0, 
-	        'errdesc' => '', 
-	        'mid' => $self->{mid});
+	while ($captcha_sid);
+
+	my ($access_token, $user_id);
+	($access_token, $user_id)			= $response->previous()->header('Location') =~ /access_token=(\w+).*?user_id=(\d+)/
+							  if ($response->previous());
+
+	unless ($access_token && $user_id)
+	{
+											# Логинимся в первый раз, нужно
+											# выставить настройки
+		my ($link) 				= $response->decoded_content() =~ /(oauth\.vk\.com.*?)"/;
+
+		return ('errcode' => 101,
+			'errdesc' => 'Cannot parse redirect link (possibly incorrect login data)!') unless ($link);
+
+		$response				= $browser->post("https://$link");
+		$response 				= $browser->get($response->header('Location'))
+							if ($response->header('Location'));
+
+		my $redirect 				= $response->previous()->header("Location");
+		($access_token, $user_id) 		= $redirect =~ /access_token=(\w+).*?user_id=(\d+)/;
+
+	}
+
+	return ('errcode' => 102,
+		'errdesc' => 'Cannot parse acess token and user id!') unless ($access_token && $user_id);
+
+											# Проверка безопасности
+											# И получение браузерных cookies
+	$response					= $browser->get("http://vk.com");
+	($ip_h)						= $response->decoded_content() =~ /ip_h=(\w+)/;
+	$response					= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
+
+	if ($response->decoded_content() =~ /security_check/)
+	{
+		return ('errcode' => 103,
+			'errdesc' => 'Holy shit! Security check!') unless ($mphone);
+
+		my ($hash) 				= $response->content =~ /hash: \'(.*)\'}/;
+		return ('errcode' => 104,
+			'errdesc' => 'Cannot parse security hash!') unless ($hash);
+
+		$response 				= $browser->get("http://vk.com/login.php?act=security_check".
+												"&code=$mphone".
+												"&to=".
+												"&al_page=".
+												"&hash=$hash");
+		return ('errcode' => 105,
+			'errdesc' => 'Cannot pass security check!') unless ((defined $response->previous()) &&
+									    !($response->previous()->header("Location") =~ /security_check/));
+
+		$response				= $browser->get("http://vk.com");
+		($ip_h)					= $response->decoded_content() =~ /ip_h=(\w+)/;
+		$response				= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
+
+	}
+
+	$self->{browser} 				= $browser;
+	$self->{mid} 					= $user_id;
+	$self->{access_token}				= $access_token;
+
+	return ('errcode' => 0,
+		'mid'	  => $user_id,
+		'errdesc' => '');
+
 }
 
 
@@ -223,19 +244,19 @@ sub interface
 
 #-----------------------------------------------------------------------------------------
 #							Запрос к контакту с обработкой
-#							капчи. Используется только в 
+#							капчи. Используется только в
 #							логине
 #							Rev1, 110331
-#	
+#
 sub postWithCaptcha
 {
 	my ($self, $browser, $link, $post) = @_;
-	
+
 	bless $browser, "LWP::UserAgent";
-	
+
 	my $response = $browser->post($link, $post);
 	my $callback = $self->{captcha_callback};
-	
+
 	while ($response->content =~ /captcha_sid/)
 	{
 		return undef unless defined $callback;
@@ -244,58 +265,41 @@ sub postWithCaptcha
 		my $cdata = decode_json($response->content);
 		my $sid = $cdata->{'captcha_sid'};
 		$cdata->{'difficult'} = 0 unless ($cdata->{'difficult'});
-		
+
 		my $diff = abs (int $cdata->{'difficult'} - 1);
 		$cdata->{'captcha_url'} = "http://vk.com/captcha.php?sid=$sid&s=$diff";
 		$post->{'captcha_sid'} = $cdata->{'captcha_sid'};
 		$post->{'captcha_key'} = &$callback($cdata);
 		$response = $browser->post($link, $post);
 	}
-	
+
 	return $response;
 }
 
-	
+
 #-----------------------------------------------------------------------------------------
 #							Запрос к API
-#							Rev1, 110327
+#							Rev1, 120121
 sub request {
-	my ($self, $method, $cparams) = @_;
-	#my $method = $_[0];
-	#my $params = $_[1];
-	my $params;
-	%$params = %$cparams;
+	my ($self, $method, $params) = @_;
 
-	$params->{'api_id'}    = $self->{'api_id'};
-	$params->{'v'}         = '3.0';
-	$params->{'method'}    = $method;
-	$params->{'format'}    = 'JSON';
-	$params->{'random'}    = int rand 1000;
-	
-							# Заполняем подпись запроса - sig
-	my $sig = $self->{mid};
-        foreach my $k (sort keys %$params)
-        {
-		$sig .= $k.'='.$params->{$k};
-	}
-	$sig .= $self->{secret};
-	$params->{'sig'} = md5_hex(encode_utf8($sig));
-	$params->{'sid'} = $self->{sid};
+	my $browser = $self->{browser};
+	bless $browser, "LWP::UserAgent";
 
-							# Шлём запрос
-	my $browser = LWP::UserAgent->new(agent => $self->{'useragent'});
-	my $response = $browser->post($self->{'api_url'}, $params);
-	utf8::encode($response->content);
-	
+	my $reqstr = join "&", map { $_."=".$params->{$_} } keys %$params;
+	$reqstr .= "&access_token=".$self->{access_token};
+
+	my $response = $browser->get("https://api.vk.com/method/$method?$reqstr");
+
 	my $result;
 							# А вдруг не выйдет?
 	unless (eval { $result = decode_json($response->content) })
 	{
-		$result->{error}->{error_code} = 555; 
+		$result->{error}->{error_code} = 555;
 		$result->{error}->{error_desc} = $response->content;
 		return $result;
 	}
-	
+
 							# Captcha is needed.
 	if ($result->{error}->{error_code} and $result->{error}->{error_code} == 14)
 	{
@@ -303,44 +307,14 @@ sub request {
 		my $answer = &$callback({ "captcha_url" => $result->{error}->{captcha_img},
 		                          "captcha_sid" => $result->{error}->{captcha_sid}
 		                        });
-		$cparams->{captcha_sid} = $result->{error}->{captcha_sid};
-		$cparams->{captcha_key} = $answer;
-	        return $self->request($method, $cparams);
+		$params->{captcha_sid} = $result->{error}->{captcha_sid};
+		$params->{captcha_key} = $answer;
+	        return $self->request($method, $params);
 	}
-	
-							# Декодировка
+
 	return $result;
 }
 
 
-#-----------------------------------------------------------------------------------------
-#							urlencode и urldecode
-#							Rev1, 110327
-sub _encurl 
-{
-	my ($url) = @_;
-	( defined $url ) || ( $url = "" );
-	$url =~ s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/seg;
-	return $url;
-}
-
-sub _decurl
-{
-	my $url = shift;
-	$url =~ s/\%([A-Fa-f0-9]{2})/pack('C', hex($1))/seg;
-	return $url;
-}
-
-
-#-----------------------------------------------------------------------------------------
-#							Получение/замена объекта "Браузер"
-#							Rev1, 110701
-sub browser
-{
-	my ($self, $browser) = shift;
-	defined $browser ? ($self->{browser} = $browser) : ($browser = $self->{browser});
-	return $browser;
-}
-
-1;   
+1;
 

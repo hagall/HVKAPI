@@ -1,4 +1,4 @@
-HVKAPI 0.3 README FILE
+HVKAPI 1.0 README FILE
 ================================================================================
 
 
@@ -17,7 +17,10 @@ also available in these requests, but keep in mind that VK can change it's
 layout (as well as a login algorythm) at any moment. It can break down login 
 function or "captcha-catch" methods.
 
-
+REQUIREMENTS
+--------------------------------------------------------------------------------
+First of all, LWP is required. Additionally you may need to install 
+LWP::Protocol::https module, otherwise all this crap will not work. 
 
 METHODS 
 --------------------------------------------------------------------------------
@@ -27,7 +30,7 @@ HVKAPI defines only one class called HVKAPI, which provides the following
 methods: 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-new (appid, useragent, captchaCallback)
+new (captchaCallback,appid, useragent)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Class constructor. 
  - appid (int)- id of your desktop application (you must create it at first). 
@@ -48,17 +51,18 @@ associative array (in PHP) or a hash (in Perl) with these fields:
 Callback function should return a string - captcha answer. 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-login (email, pass)
+login (email, pass, mphone)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Login function, parameters are quite obvious. Function returns a hash (in Perl)
+Login function, parameters are quite obvious. mphone should be the last 4 numbers 
+of mobile phone - in case of security check. Function returns a hash (in Perl)
 or associative array (in PHP) with these keys: 
 	errcode - error code
 	errdesc - error description
 If succeed, errcode = 0. Possible error codes are: 
-	101 (ERROR_LOGIN) - incorrect login data
-	102 (ERROR_SECURITY) - security check
-	666 (ERROR_CAPTCHA) - the captcha appeared
-			      (and you haven't set callback)
+	101  - incorrect login data
+	103  - security check (or mphone is undefined or invalid)
+	666  - the captcha appeared
+	      (and you haven't set callback)
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -73,18 +77,32 @@ Returns a hash or an associative array (in Perl/PHP). Look userapi.com for
 details.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-interface()
+interface([browser])
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-LWP::UserAgent object for HTTP requests (since 0.3 only!)
+LWP::UserAgent object for HTTP requests. Note that if you're using restoreSession
+(not ordinary login), there will be no cookies for http-requests, e.g. without API.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 postWithCaptcha(...)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Just a POST-request through the LWP::UserAgent object with captcha processing. 
-(since 0.3 only!)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+restoreSession(access_token, mid)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Restores user session using mid and access_token "session variables". 
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+getSessionVars()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Returns a hash with session variables (mid, access_token), which identify user
+session. With "restoreSession" this function may be used for 
+saving/restoring cookies.
+
 
 CONSTANTS AND DEFAULT VALUES
 --------------------------------------------------------------------------------
-
 Located at the beginning of the module and well-documented. You can change
-a default application id, UserAgent and something else.
+a default application id, UserAgent and something else. Or break everything down,
+yep.
