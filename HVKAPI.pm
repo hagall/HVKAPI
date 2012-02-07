@@ -15,7 +15,7 @@ package HVKAPI;
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#    Rev5, 120121
+#    Rev4, 111128
 
 use warnings;
 use strict;
@@ -90,12 +90,13 @@ sub getSessionVars
 
 #-----------------------------------------------------------------------------------------
 #							Логин в API без компонента
-#							Rev5, 120121
+#							Rev6, 120207
 sub login
 {
 	my $self = shift;
 
 	my ($ulogin, $upass, $mphone) = @_;
+
 
 	my ($app_id, $app_settings) 			= ($self->{api_id}, $self->{app_settings});
 	my $captchaCallback 				= $self->{captcha_callback};
@@ -136,9 +137,6 @@ sub login
 							  };
 			my $callback = $self->{captcha_callback};
 			$captcha_key = &$callback($cdata);
-
-			return ('errcode' => 666,
-				'errdesc' => 'Holy shit! The captcha and no callback!') unless defined $captcha_key;
 		}
 
 		$response				= $browser->post("https://login.vk.com/?act=login&soft=1&utf8=1",
@@ -177,7 +175,7 @@ sub login
 		my ($link) 				= $response->decoded_content() =~ /(oauth\.vk\.com.*?)"/;
 
 		return ('errcode' => 101,
-			'errdesc' => 'Cannot parse redirect link (possibly incorrect login data)!') unless ($link);
+			'errdesc' => 'Cannot parse redirect link!') unless ($link);
 
 		$response				= $browser->post("https://$link");
 		$response 				= $browser->get($response->header('Location'))
@@ -196,6 +194,7 @@ sub login
 	$response					= $browser->get("http://vk.com");
 	($ip_h)						= $response->decoded_content() =~ /ip_h=(\w+)/;
 	$response					= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
+	$response					= $browser->get("http://vk.com/id1");
 
 	if ($response->decoded_content() =~ /security_check/)
 	{
@@ -216,8 +215,8 @@ sub login
 									    !($response->previous()->header("Location") =~ /security_check/));
 
 		$response				= $browser->get("http://vk.com");
-		($ip_h)					= $response->decoded_content() =~ /ip_h=(\w+)/;
-		$response				= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
+#		($ip_h)					= $response->decoded_content() =~ /ip_h=(\w+)/;
+#		$response				= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
 
 	}
 
