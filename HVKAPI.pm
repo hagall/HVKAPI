@@ -112,6 +112,7 @@ sub login
 	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
 	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
 
+
 	my $response 					= $browser->get("http://oauth.vk.com/oauth/authorize?client_id=$appId".
 									"&scope=$appSettings".
 									"&display=wap&response_type=token");
@@ -285,10 +286,11 @@ sub request {
 	my $browser = $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	my $reqstr = join "&", map { $_."=".$params->{$_} } keys %$params;
-	$reqstr .= "&access_token=".$self->{access_token};
+	#my $reqstr = join "&", map { $_."=".$params->{$_} } keys %$params;
+	#$reqstr .= "&access_token=".$self->{access_token};
+	$params->{"access_token"} = $self->{access_token};
 
-	my $response = $browser->get("https://api.vk.com/method/$method?$reqstr");
+	my $response = $browser->post("https://api.vk.com/method/$method", $params);
 
 	my $result;
 							# А вдруг не выйдет?
