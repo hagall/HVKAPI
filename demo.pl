@@ -1,5 +1,7 @@
 	use HVKAPI;
 	use Data::Dumper;
+	use utf8;
+	use open qw/:std :utf8/;
 
 							# First of all, we create an object. We
 							# will set captcha-callback, but leave
@@ -7,8 +9,9 @@
 							# set to default values
 	my $vk = new HVKAPI(\&captchaCallback);
 							# Login attempt. Die if error occured.
-	my %res = $vk->login('login', 'pass');
+	my %res = $vk->login('login', 'pass', 'phone');
 	die("Error #$res{errcode}: $res{errdesc}") if ($res{errcode});
+	print "Login successful!\n";
 
 							# The request itself
 	my $resp = $vk->request('getProfiles', {'uids'=>'1', "test" => "2"});

@@ -100,6 +100,11 @@ Returns a hash with session variables (mid, access_token), which identify user
 session. With "restoreSession" this function may be used for 
 saving/restoring cookies.
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+get(), post()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+These methods are abstract and just call proper ones of LWP::UserAgent
+
 
 CONSTANTS AND DEFAULT VALUES
 --------------------------------------------------------------------------------

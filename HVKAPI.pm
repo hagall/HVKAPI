@@ -27,18 +27,19 @@ use HTTP::Cookies;
 use Data::Dumper;
 use JSON;
 use Encode qw(encode_utf8);
+no  warnings;
 
 
 our $VERSION = '1.0';
-our $appId = 2256065;					# ID äåôîëòíîãî ïðèëîæåíèÿ
+our $appId = 2256065;					# ID Ð´ÐµÑ„Ð¾Ð»Ñ‚Ð½Ð¾Ð³Ð¾ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ
 our $appSettings = 'friends,photos,audio,video,docs,notes,pages,wall,groups,messages';
 our $defaultAgent = 'Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1';
-our $defaultApiUrl = 'http://api.vk.com/api.php'; # URL äëÿ API-çàïðîñîâ
+our $defaultApiUrl = 'http://api.vk.com/api.php'; # URL Ð´Ð»Ñ API-Ð·Ð°Ð¿Ñ€Ð¾ÑÐ¾Ð²
 
 our @ISA = qw(Exporter);
 
 #-----------------------------------------------------------------------------------------
-#							Êîíñòðóêòîð êëàññà.
+#							ÐšÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€ ÐºÐ»Ð°ÑÑÐ°.
 #							Rev2, 110605
 sub new {
 	my $class = shift;
@@ -57,7 +58,7 @@ sub new {
 
 
 #-----------------------------------------------------------------------------------------
-#							Çàäà¸ì callback äëÿ êàï÷è
+#							Ð—Ð°Ð´Ð°Ñ‘Ð¼ callback Ð´Ð»Ñ ÐºÐ°Ð¿Ñ‡Ð¸
 #							Rev1, 110605
 sub setCallback
 {
@@ -68,7 +69,7 @@ sub setCallback
 
 
 #-----------------------------------------------------------------------------------------
-#							Âîññòàíîâëåíèå ñåññèè
+#							Ð’Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐµÑÑÐ¸Ð¸
 #							Rev2, 120121
 sub restoreSession
 {
@@ -80,7 +81,7 @@ sub restoreSession
 
 
 #-----------------------------------------------------------------------------------------
-#							Ïîëó÷åíèå ïàðàìåòðîâ ñåññèè
+#							ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½Ð¸Ðµ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð² ÑÐµÑÑÐ¸Ð¸
 #							Rev2, 120121
 sub getSessionVars
 {
@@ -89,8 +90,8 @@ sub getSessionVars
 }
 
 #-----------------------------------------------------------------------------------------
-#							Ëîãèí â API áåç êîìïîíåíòà
-#							Rev6, 120207
+#							Ð›Ð¾Ð³Ð¸Ð½ Ð² API Ð±ÐµÐ· ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ð°
+#							Rev7, 120309
 sub login
 {
 	my $self = shift;
@@ -102,16 +103,15 @@ sub login
 	my $captchaCallback 				= $self->{captcha_callback};
 
 	($self->{mid}, $self->{access_token})		= (0, 0);
-	$self->{browser} 				= LWP::UserAgent->new();
 
-	my $browser 					= $self->{browser};
+	my $browser 					= LWP::UserAgent->new();
+	$self->{browser} 				= \$browser;
 	$browser->agent($self->{useragent});
 	$browser->cookie_jar(new HTTP::Cookies());
 	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
 	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
 	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
-
 
 	my $response 					= $browser->get("http://oauth.vk.com/oauth/authorize?client_id=$appId".
 									"&scope=$appSettings".
@@ -120,7 +120,6 @@ sub login
 	my ($ip_h) 					= $response->decoded_content() =~ /name="ip_h" value="(\w+)"/;
 	my ($to_link) 					= $response->decoded_content() =~ /name="to" value="([\w\/]+)"/;
 
-
 	return ('errcode' => 100,
 	        'errdesc' => 'Cannot parse initial parameters!') unless ($ip_h && $to_link);
 
@@ -128,8 +127,8 @@ sub login
 
 	do
 	{
-											# Îáðàáàòûâàåì êàï÷ó
-											# ñ ïðîøëîãî öèêëà
+											# ÐžÐ±Ñ€Ð°Ð±Ð°Ñ‚Ñ‹Ð²Ð°ÐµÐ¼ ÐºÐ°Ð¿Ñ‡Ñƒ
+											# Ñ Ð¿Ñ€Ð¾ÑˆÐ»Ð¾Ð³Ð¾ Ñ†Ð¸ÐºÐ»Ð°
 		if ($captcha_sid)
 		{
 			my $cdata 			= {'captcha_url' => "http://vk.com/captcha.php?sid=$captcha_sid&dif=0",
@@ -161,7 +160,7 @@ sub login
 								if ($response->header('Location'));
 
 		($captcha_sid)				= $response->decoded_content() =~ /name="captcha_sid" value="(\d+)"/;
-
+		
 	}
 	while ($captcha_sid);
 
@@ -171,8 +170,8 @@ sub login
 
 	unless ($access_token && $user_id)
 	{
-											# Ëîãèíèìñÿ â ïåðâûé ðàç, íóæíî
-											# âûñòàâèòü íàñòðîéêè
+											# Ð›Ð¾Ð³Ð¸Ð½Ð¸Ð¼ÑÑ Ð² Ð¿ÐµÑ€Ð²Ñ‹Ð¹ Ñ€Ð°Ð·, Ð½ÑƒÐ¶Ð½Ð¾
+											# Ð²Ñ‹ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸
 		my ($link) 				= $response->decoded_content() =~ /(oauth\.vk\.com.*?)"/;
 
 		return ('errcode' => 101,
@@ -182,16 +181,19 @@ sub login
 		$response 				= $browser->get($response->header('Location'))
 							if ($response->header('Location'));
 
-		my $redirect 				= $response->previous()->header("Location");
-		($access_token, $user_id) 		= $redirect =~ /access_token=(\w+).*?user_id=(\d+)/;
+		if (defined  $response->previous())
+		{
+			my $redirect 				= $response->previous()->header("Location");
+			($access_token, $user_id) 		= $redirect =~ /access_token=(\w+).*?user_id=(\d+)/;
+		}
 
 	}
 
 	return ('errcode' => 102,
 		'errdesc' => 'Cannot parse acess token and user id!') unless ($access_token && $user_id);
 
-											# Ïðîâåðêà áåçîïàñíîñòè
-											# È ïîëó÷åíèå áðàóçåðíûõ cookies
+											# ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾ÑÑ‚Ð¸
+											# Ð˜ Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð¸Ðµ Ð±Ñ€Ð°ÑƒÐ·ÐµÑ€Ð½Ñ‹Ñ… cookies
 	$response					= $browser->get("http://vk.com");
 	($ip_h)						= $response->decoded_content() =~ /ip_h=(\w+)/;
 	$response					= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
@@ -221,7 +223,6 @@ sub login
 
 	}
 
-	$self->{browser} 				= $browser;
 	$self->{mid} 					= $user_id;
 	$self->{access_token}				= $access_token;
 
@@ -233,7 +234,7 @@ sub login
 
 
 #-----------------------------------------------------------------------------------------
-#							Ïîëó÷åíèÿ ññûëêè íà îáúåêò-áðàóçåð
+#							ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½Ð¸Ñ ÑÑÑ‹Ð»ÐºÐ¸ Ð½Ð° Ð¾Ð±ÑŠÐµÐºÑ‚-Ð±Ñ€Ð°ÑƒÐ·ÐµÑ€
 #							Rev1, 110605
 sub interface
 {
@@ -243,34 +244,35 @@ sub interface
 
 
 #-----------------------------------------------------------------------------------------
-#							Çàïðîñ ê êîíòàêòó ñ îáðàáîòêîé
-#							êàï÷è. Èñïîëüçóåòñÿ òîëüêî â
-#							ëîãèíå
-#							Rev1, 110331
+#							Ð—Ð°Ð¿Ñ€Ð¾Ñ Ðº ÐºÐ¾Ð½Ñ‚Ð°ÐºÑ‚Ñƒ Ñ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ¾Ð¹
+#							ÐºÐ°Ð¿Ñ‡Ð¸. Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ÑÑ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð²
+#							Ð»Ð¾Ð³Ð¸Ð½Ðµ
+#							Rev3, 120308
 #
 sub postWithCaptcha
 {
-	my ($self, $browser, $link, $post) = @_;
+	my ($self, $link, $post, $headers) = @_;
 
+	my $browser 				= $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	my $response = $browser->post($link, $post);
-	my $callback = $self->{captcha_callback};
+	my $response 				= $browser->post($link, $post, $headers);
+	my $callback 				= $self->{captcha_callback};
 
 	while ($response->content =~ /captcha_sid/)
 	{
 		return undef unless defined $callback;
 
 		utf8::encode($response->content);
-		my $cdata = decode_json($response->content);
-		my $sid = $cdata->{'captcha_sid'};
-		$cdata->{'difficult'} = 0 unless ($cdata->{'difficult'});
+		my $cdata 			= decode_json($response->content);
+		my $sid 			= $cdata->{'captcha_sid'};
+		$cdata->{'difficult'} 		= 0 unless ($cdata->{'difficult'});
 
 		my $diff = abs (int $cdata->{'difficult'} - 1);
-		$cdata->{'captcha_url'} = "http://vk.com/captcha.php?sid=$sid&s=$diff";
-		$post->{'captcha_sid'} = $cdata->{'captcha_sid'};
-		$post->{'captcha_key'} = &$callback($cdata);
-		$response = $browser->post($link, $post);
+		$cdata->{'captcha_url'}		= "http://vk.com/captcha.php?sid=$sid&s=$diff";
+		$post->{'captcha_sid'} 		= $cdata->{'captcha_sid'};
+		$post->{'captcha_key'} 		= &$callback($cdata);
+		$response 			= $browser->post($link, $post, $headers);
 	}
 
 	return $response;
@@ -278,7 +280,32 @@ sub postWithCaptcha
 
 
 #-----------------------------------------------------------------------------------------
-#							Çàïðîñ ê API
+#							Ð‘Ñ‹ÑÑ‚Ñ€Ñ‹Ð¹ Ð³ÐµÑ‚-Ð·Ð°Ð¿Ñ€Ð¾Ñ
+#							Rev1, 120221
+sub get
+{
+	my $self = shift;
+	my $browser = $self->{browser};
+	bless $browser, "LWP::UserAgent";
+
+	return $browser->get(@_);
+}
+
+
+#-----------------------------------------------------------------------------------------
+#							Ð‘Ñ‹ÑÑ‚Ñ€Ñ‹Ð¹ Ð¿Ð¾ÑÑ‚-Ð·Ð°Ð¿Ñ€Ð¾Ñ
+#							Rev1, 120221
+sub post
+{
+	my $self = shift;
+	my $browser = $self->{browser};
+	bless $browser, "LWP::UserAgent";
+
+	return $browser->post(@_);
+}
+
+#-----------------------------------------------------------------------------------------
+#							Ð—Ð°Ð¿Ñ€Ð¾Ñ Ðº API
 #							Rev1, 120121
 sub request {
 	my ($self, $method, $params) = @_;
@@ -286,14 +313,12 @@ sub request {
 	my $browser = $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	#my $reqstr = join "&", map { $_."=".$params->{$_} } keys %$params;
-	#$reqstr .= "&access_token=".$self->{access_token};
 	$params->{"access_token"} = $self->{access_token};
 
-	my $response = $browser->post("https://api.vk.com/method/$method", $params);
+	my $response = $$browser->post("https://api.vk.com/method/$method", $params);
 
 	my $result;
-							# À âäðóã íå âûéäåò?
+							# Ð Ð²Ð´Ñ€ÑƒÐ³ Ð½Ðµ Ð²Ñ‹Ð¹Ð´ÐµÑ‚?
 	unless (eval { $result = decode_json($response->content) })
 	{
 		$result->{error}->{error_code} = 555;
