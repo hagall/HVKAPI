@@ -15,7 +15,7 @@ package HVKAPI;
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#    Rev6, 120306
+#    Rev7, 120720
 
 use warnings;
 use strict;
@@ -91,7 +91,7 @@ sub getSessionVars
 
 #-----------------------------------------------------------------------------------------
 #							Логин в API без компонента
-#							Rev7, 120309
+#							Rev8, 120720
 sub login
 {
 	my $self = shift;
@@ -105,126 +105,101 @@ sub login
 	($self->{mid}, $self->{access_token})		= (0, 0);
 
 	my $browser 					= LWP::UserAgent->new();
-	$self->{browser} 				= \$browser;
 	$browser->agent($self->{useragent});
 	$browser->cookie_jar(new HTTP::Cookies());
 	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
 	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
 	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
-
-	my $response 					= $browser->get("http://oauth.vk.com/oauth/authorize?client_id=$appId".
-									"&scope=$appSettings".
-									"&display=wap&response_type=token");
-
-	my ($ip_h) 					= $response->decoded_content() =~ /name="ip_h" value="(\w+)"/;
-	my ($to_link) 					= $response->decoded_content() =~ /name="to" value="([\w\/]+)"/;
-
-	return ('errcode' => 100,
-	        'errdesc' => 'Cannot parse initial parameters!') unless ($ip_h && $to_link);
-
-	my ($captcha_sid, $captcha_key);
-
-	do
-	{
-											# Обрабатываем капчу
-											# с прошлого цикла
-		if ($captcha_sid)
-		{
-			my $cdata 			= {'captcha_url' => "http://vk.com/captcha.php?sid=$captcha_sid&dif=0",
-							   'captcha_sid' => $captcha_sid,
-							   'difficulty'  => 0
-							  };
-			my $callback = $self->{captcha_callback};
-			$captcha_key = &$callback($cdata);
-		}
-
-		$response				= $browser->post("https://login.vk.com/?act=login&soft=1&utf8=1",
-										{"q"			=> 1,
-										 "from_host" 		=> "oauth.vk.com",
-										 "from_protocol" 	=> "http",
-										 "ip_h" 		=> $ip_h,
-										 "to" 			=> $to_link,
-										 "email" 		=> $ulogin,
-										 "pass" 		=> $upass,
-										 "act"			=> "login",
-										 "soft"			=> 1,
-										 "utf8"			=> 1,
-										 "captcha_sid"		=> $captcha_sid,
-										 "captcha_key"		=> $captcha_key
-										});
-
-		my $old_location 			= $response->header('Location');
-
-		$response 				= $browser->get($response->header('Location'))
-								if ($response->header('Location'));
-
-		($captcha_sid)				= $response->decoded_content() =~ /name="captcha_sid" value="(\d+)"/;
+									
+									
+										# Обычный логин ВК
+	my $response					= $browser->get("http://m.vk.com/login?fast=1");
 		
-	}
-	while ($captcha_sid);
-
-	my ($access_token, $user_id);
-	($access_token, $user_id)			= $response->previous()->header('Location') =~ /access_token=(\w+).*?user_id=(\d+)/
-							  if ($response->previous());
-
-	unless ($access_token && $user_id)
+	my ($postlink)					= $response->decoded_content() =~ /method="post" action="(.*?)"/;
+	return ('errcode' => 106,
+	        'errdesc' => 'Cannot parse ACTION link!') unless ($postlink);
+	        
+	$response					= $browser->post($postlink, {"email" => $ulogin, "pass" => $upass});	
+		
+	if ($response->header("Location") =~ /m=1&/)
 	{
-											# Логинимся в первый раз, нужно
-											# выставить настройки
-		my ($link) 				= $response->decoded_content() =~ /(oauth\.vk\.com.*?)"/;
-
-		return ('errcode' => 101,
-			'errdesc' => 'Cannot parse redirect link!') unless ($link);
-
-		$response				= $browser->post("https://$link");
-		$response 				= $browser->get($response->header('Location'))
-							if ($response->header('Location'));
-
-		if (defined  $response->previous())
-		{
-			my $redirect 				= $response->previous()->header("Location");
-			($access_token, $user_id) 		= $redirect =~ /access_token=(\w+).*?user_id=(\d+)/;
-		}
-
+										# Либо логин-пароль неверный,
+										# либо аккаунт не привязан к 
+										# мобильному. Пытаемся залогиниться через
+										# главную страницу.
+		return ('errcode' => 107,
+	        	'errdesc' => 'Invalid login data!') unless ($postlink);	
 	}
-
-	return ('errcode' => 102,
-		'errdesc' => 'Cannot parse acess token and user id!') unless ($access_token && $user_id);
-
-											# Проверка безопасности
-											# И получение браузерных cookies
-	$response					= $browser->get("http://vk.com");
-	($ip_h)						= $response->decoded_content() =~ /ip_h=(\w+)/;
-	$response					= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
-	$response					= $browser->get("http://vk.com/id1");
-
+	
+	unless ($response->header("Location"))
+	{
+		return ('errcode' => 108,
+	        	'errdesc' => 'Invalid headers returned.') unless ($postlink);
+	}
+	
+	$response					= $browser->get($response->header("Location"));
+	
 	if ($response->decoded_content() =~ /security_check/)
 	{
 		return ('errcode' => 103,
 			'errdesc' => 'Holy shit! Security check!') unless ($mphone);
 
-		my ($hash) 				= $response->content =~ /hash: \'(.*)\'}/;
+		
+		my ($postlink)				= $response->decoded_content() =~ /method="post" action="(.*?)"/;
+		
 		return ('errcode' => 104,
-			'errdesc' => 'Cannot parse security hash!') unless ($hash);
+			'errdesc' => 'Cannot parse security hash link!') unless ($postlink);
 
-		$response 				= $browser->get("http://vk.com/login.php?act=security_check".
-												"&code=$mphone".
-												"&to=".
-												"&al_page=".
-												"&hash=$hash");
+		$postlink = "http://m.vk.com".$postlink unless ($postlink =~ /^http/);
+
+		$response 				= $browser->post($postlink, {"code" => $mphone});
+		
 		return ('errcode' => 105,
-			'errdesc' => 'Cannot pass security check!') unless ((defined $response->previous()) &&
-									    !($response->previous()->header("Location") =~ /security_check/));
+			'errdesc' => 'Cannot pass security check!') if ($response->decoded_content =~ /security_check/);
 
-		$response				= $browser->get("http://vk.com");
-#		($ip_h)					= $response->decoded_content() =~ /ip_h=(\w+)/;
-#		$response				= $browser->get("https://login.vk.com/?al_frame=1&from_host=vk.com&from_protocol=http&ip_h=$ip_h");
-
+		return ('errcode' => 106,
+			'errdesc' => 'Invalid headers!') unless (defined $response->header("Location"));
+		$response				= $browser->get($response->header("Location"));
 	}
+
+
+							
+										# Логин за API
+	$response 					= $browser->get("http://oauth.vk.com/oauth/authorize?client_id=$appId".
+									"&scope=$appSettings".
+									"&display=wap&response_type=token");
+	my ($access_token, $user_id);		
+										# Т.к. мы уже залогинились за вконтакт
+										# заново вводить логпасс не нужно
+	unless ($response->decoded_content() =~ /Login success/)
+	{
+										# Логинимся в первый раз, нужно
+										# выставить настройки
+		my ($link) 				= $response->decoded_content() =~ /(oauth\.vk\.com.*?)"/;
+		return ('errcode' => 101,
+			'errdesc' => 'Cannot parse redirect link!') unless ($link);
+			
+		$response				= $browser->get("https://$link");
+		if (defined $response->previous())
+		{
+			my $redirect = $response->previous()->header("Location");
+			($access_token, $user_id) 		= $redirect =~ /access_token=(\w+).*?user_id=(\d+)/;
+		}
+	}
+	else
+	{
+		($access_token, $user_id) 		= $response->previous()->header("Location") =~ /access_token=(\w+).*?user_id=(\d+)/;
+	}
+
+	return ('errcode' => 102,
+		'errdesc' => 'Cannot parse acess token and user id!') unless ($access_token && $user_id);
+
+	$response					= $browser->get("http://vk.com/id1");
 
 	$self->{mid} 					= $user_id;
 	$self->{access_token}				= $access_token;
+	$self->{browser} 				= $browser;
 
 	return ('errcode' => 0,
 		'mid'	  => $user_id,
@@ -247,7 +222,7 @@ sub interface
 #							Запрос к контакту с обработкой
 #							капчи. Используется только в
 #							логине
-#							Rev3, 120308
+#							Rev4, 120310
 #
 sub postWithCaptcha
 {
@@ -259,6 +234,35 @@ sub postWithCaptcha
 	my $response 				= $browser->post($link, $post, $headers);
 	my $callback 				= $self->{captcha_callback};
 
+	my ($sid, $diff, $cdata);
+	
+	while ($response->content =~ /captcha_sid/ or ($sid, $diff) = $response->content =~ /<!>2<!>(\d+)<!>(\d)/)
+	{
+		return undef unless (defined $callback);
+
+		if ($response->content =~ /<!>2<!>(\d+)<!>(\d)/)
+		{							# Новая капча
+			$cdata->{'captcha_sid'}	= $sid;
+			$cdata->{'difficult'} = $diff;
+		}
+		else
+		{							# Старая капча
+			utf8::encode($response->content);
+			$cdata = decode_json($response->content);
+			$sid = $cdata->{'captcha_sid'};
+		}
+
+		$cdata->{'difficult'} = 0 unless ($cdata->{'difficult'});
+
+		$diff = abs (int $cdata->{'difficult'} - 1);
+		$cdata->{'captcha_url'} = "http://vk.com/captcha.php?sid=$sid&s=$diff";
+		$post->{'captcha_sid'} = $cdata->{'captcha_sid'};
+		$post->{'captcha_key'} = &$callback($cdata);
+
+		$response = $browser->post($link, $post, $headers);
+	}
+
+=for
 	while ($response->content =~ /captcha_sid/)
 	{
 		return undef unless defined $callback;
@@ -274,6 +278,8 @@ sub postWithCaptcha
 		$post->{'captcha_key'} 		= &$callback($cdata);
 		$response 			= $browser->post($link, $post, $headers);
 	}
+=cut
+	
 
 	return $response;
 }
@@ -281,14 +287,21 @@ sub postWithCaptcha
 
 #-----------------------------------------------------------------------------------------
 #							Быстрый гет-запрос
-#							Rev1, 120221
+#							Rev2, 120720
 sub get
 {
 	my $self = shift;
 	my $browser = $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	return $browser->get(@_);
+	my $response = $browser->get(@_);
+	unless ($response->is_success())
+	{
+		print "[ NETWORK ERROR: ".$response->status_line." ]\n";
+		$response = $browser->get(@_);
+	}
+	
+	return $response;
 }
 
 
@@ -315,15 +328,18 @@ sub request {
 
 	$params->{"access_token"} = $self->{access_token};
 
-	my $response = $$browser->post("https://api.vk.com/method/$method", $params);
+	my $response = $browser->post("https://api.vk.com/method/$method", $params);
 
 	my $result;
 							# А вдруг не выйдет?
-	unless (eval { $result = decode_json($response->content) })
+	until (eval { $result = decode_json($response->content) } && $response->is_success())
 	{
-		$result->{error}->{error_code} = 555;
-		$result->{error}->{error_desc} = $response->content;
-		return $result;
+		print "\n[ ANSWER DECODING ERROR. WILL RE-SEND REQUEST ].\n";
+		$response = $browser->post("https://api.vk.com/method/$method", $params);
+		
+#		$result->{error}->{error_code} = 555;
+#		$result->{error}->{error_desc} = $response->content;
+#		return $result;
 	}
 
 							# Captcha is needed.
