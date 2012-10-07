@@ -1,7 +1,7 @@
 package HVKAPI;
 
 #    HVKAPI - class for vkontakte.ru API
-#    Copyright (C) 2011-2012 Hagall (asbrandr@jabber.ru)
+#    Copyright (C) 2011-2012 hagall (asbrandr@jabber.ru)
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -27,20 +27,23 @@ use HTTP::Cookies;
 use Data::Dumper;
 use JSON;
 use Encode qw(encode_utf8);
+use Net::INET6Glue::INET_is_INET6;
+use Net::SSLGlue::LWP;
+
 no  warnings;
 
 
-our $VERSION = '1.0';
-our $appId = 2256065;					# ID дефолтного приложения
+our $VERSION = '1.1';
+our $appId = 2256065;								# ID дефолтного приложения
 our $appSettings = 'friends,photos,audio,video,docs,notes,pages,wall,groups,messages';
 our $defaultAgent = 'Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1';
-our $defaultApiUrl = 'http://api.vk.com/api.php'; # URL для API-запросов
+our $defaultApiUrl = 'http://api.vk.com/api.php'; 				# URL для API-запросов
 
 our @ISA = qw(Exporter);
 
 #-----------------------------------------------------------------------------------------
-#							Конструктор класса.
-#							Rev2, 110605
+#										Конструктор класса.
+#										Rev2, 110605
 sub new {
 	my $class = shift;
 	my $self  = {};
@@ -50,6 +53,7 @@ sub new {
 	$self->{useragent} || ($self->{useragent} = $defaultAgent);
 	$self->{api_id} || ($self->{api_id} = $appId);
 	$self->{app_settings} = $appSettings;
+	$self->{silent} = 0;
 
 
 	$self->{api_url} = $defaultApiUrl;
@@ -58,8 +62,8 @@ sub new {
 
 
 #-----------------------------------------------------------------------------------------
-#							Задаём callback для капчи
-#							Rev1, 110605
+#										Задаём callback для капчи
+#										Rev1, 110605
 sub setCallback
 {
 	my ($self, $callback) = @_;
@@ -69,8 +73,8 @@ sub setCallback
 
 
 #-----------------------------------------------------------------------------------------
-#							Восстановление сессии
-#							Rev2, 120121
+#										Восстановление сессии
+#										Rev2, 120121
 sub restoreSession
 {
 	my $self = shift;
@@ -81,8 +85,8 @@ sub restoreSession
 
 
 #-----------------------------------------------------------------------------------------
-#							Получение параметров сессии
-#							Rev2, 120121
+#										Получение параметров сессии
+#										Rev2, 120121
 sub getSessionVars
 {
 	my $self = shift;
@@ -90,8 +94,8 @@ sub getSessionVars
 }
 
 #-----------------------------------------------------------------------------------------
-#							Логин в API без компонента
-#							Rev8, 120720
+#										Логин в API без компонента
+#										Rev8, 120720
 sub login
 {
 	my $self = shift;
@@ -176,7 +180,7 @@ sub login
 	{
 										# Логинимся в первый раз, нужно
 										# выставить настройки
-		my ($link) 				= $response->decoded_content() =~ /(oauth\.vk\.com.*?)"/;
+		my ($link) 				= $response->decoded_content() =~ /(login\.vk\.com.*?)"/;
 		return ('errcode' => 101,
 			'errdesc' => 'Cannot parse redirect link!') unless ($link);
 			
@@ -195,7 +199,11 @@ sub login
 	return ('errcode' => 102,
 		'errdesc' => 'Cannot parse acess token and user id!') unless ($access_token && $user_id);
 
-	$response					= $browser->get("http://vk.com/id1");
+										# Обновление cookie с m.vk.com в vk.com
+	my ($remix_sid) = $browser->cookie_jar->as_string =~ /remixsid=(\w+)/;
+	$browser->cookie_jar->set_cookie(3, "remixsid", $remix_sid, "/", "vk.com");	
+	$response					= $browser->get("http://m.vk.com/id1");
+	
 
 	$self->{mid} 					= $user_id;
 	$self->{access_token}				= $access_token;
@@ -209,8 +217,8 @@ sub login
 
 
 #-----------------------------------------------------------------------------------------
-#							Получения ссылки на объект-браузер
-#							Rev1, 110605
+#										Получения ссылки на объект-браузер
+#										Rev1, 110605
 sub interface
 {
 	my $self = shift;
@@ -219,10 +227,10 @@ sub interface
 
 
 #-----------------------------------------------------------------------------------------
-#							Запрос к контакту с обработкой
-#							капчи. Используется только в
-#							логине
-#							Rev4, 120310
+#										Запрос к контакту с обработкой
+#										капчи. Используется только в
+#										логине
+#										Rev4, 120310
 #
 sub postWithCaptcha
 {
@@ -241,12 +249,12 @@ sub postWithCaptcha
 		return undef unless (defined $callback);
 
 		if ($response->content =~ /<!>2<!>(\d+)<!>(\d)/)
-		{							# Новая капча
+		{								# Новая капча
 			$cdata->{'captcha_sid'}	= $sid;
 			$cdata->{'difficult'} = $diff;
 		}
 		else
-		{							# Старая капча
+		{								# Старая капча
 			utf8::encode($response->content);
 			$cdata = decode_json($response->content);
 			$sid = $cdata->{'captcha_sid'};
@@ -262,32 +270,13 @@ sub postWithCaptcha
 		$response = $browser->post($link, $post, $headers);
 	}
 
-=for
-	while ($response->content =~ /captcha_sid/)
-	{
-		return undef unless defined $callback;
-
-		utf8::encode($response->content);
-		my $cdata 			= decode_json($response->content);
-		my $sid 			= $cdata->{'captcha_sid'};
-		$cdata->{'difficult'} 		= 0 unless ($cdata->{'difficult'});
-
-		my $diff = abs (int $cdata->{'difficult'} - 1);
-		$cdata->{'captcha_url'}		= "http://vk.com/captcha.php?sid=$sid&s=$diff";
-		$post->{'captcha_sid'} 		= $cdata->{'captcha_sid'};
-		$post->{'captcha_key'} 		= &$callback($cdata);
-		$response 			= $browser->post($link, $post, $headers);
-	}
-=cut
-	
-
 	return $response;
 }
 
 
 #-----------------------------------------------------------------------------------------
-#							Быстрый гет-запрос
-#							Rev2, 120720
+#										GET-запрос
+#										Rev2, 120720
 sub get
 {
 	my $self = shift;
@@ -297,7 +286,7 @@ sub get
 	my $response = $browser->get(@_);
 	unless ($response->is_success())
 	{
-		print "[ NETWORK ERROR: ".$response->status_line." ]\n";
+		print STDERR "[ NETWORK ERROR: ".$response->status_line." ]\n"  unless ($self->{silent});
 		$response = $browser->get(@_);
 	}
 	
@@ -306,20 +295,27 @@ sub get
 
 
 #-----------------------------------------------------------------------------------------
-#							Быстрый пост-запрос
-#							Rev1, 120221
+#										POST-запрос
+#										Rev1, 120221
 sub post
 {
 	my $self = shift;
 	my $browser = $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	return $browser->post(@_);
+	my $response = $browser->post(@_);
+	unless ($response->is_success())
+	{
+		print STDERR "[ NETWORK ERROR: ".$response->status_line." ]\n"  unless ($self->{silent});
+		$response = $browser->post(@_);
+	}
+	
+	return $response;
 }
 
 #-----------------------------------------------------------------------------------------
-#							Запрос к API
-#							Rev1, 120121
+#										Запрос к API
+#										Rev1, 120121
 sub request {
 	my ($self, $method, $params) = @_;
 
@@ -331,18 +327,14 @@ sub request {
 	my $response = $browser->post("https://api.vk.com/method/$method", $params);
 
 	my $result;
-							# А вдруг не выйдет?
+										# А вдруг не выйдет?
 	until (eval { $result = decode_json($response->content) } && $response->is_success())
 	{
-		print "\n[ ANSWER DECODING ERROR. WILL RE-SEND REQUEST ].\n";
+		print STDERR "\n[ ANSWER DECODING ERROR. WILL RE-SEND REQUEST ].\n" unless ($self->{silent});
 		$response = $browser->post("https://api.vk.com/method/$method", $params);
-		
-#		$result->{error}->{error_code} = 555;
-#		$result->{error}->{error_desc} = $response->content;
-#		return $result;
 	}
 
-							# Captcha is needed.
+										# Captcha is needed.
 	if ($result->{error}->{error_code} and $result->{error}->{error_code} == 14)
 	{
 		my $callback = $self->{captcha_callback};
