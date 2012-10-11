@@ -1,6 +1,6 @@
 package HVKAPI;
 
-#    HVKAPI - class for vkontakte.ru API
+#    HVKAPI - class for vk.com API
 #    Copyright (C) 2011-2012 hagall (asbrandr@jabber.ru)
 #
 #    This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@ package HVKAPI;
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#    Rev7, 120720
+#    Rev9, 121005
 
 use warnings;
 use strict;

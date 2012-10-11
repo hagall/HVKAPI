@@ -1,4 +1,4 @@
-HVKAPI 1.0 README FILE
+HVKAPI 1.1 README FILE
 ================================================================================
 
 
@@ -6,7 +6,7 @@ HVKAPI 1.0 README FILE
 DESCRIPTION
 --------------------------------------------------------------------------------
 
-HVKAPI is the module for using Vkontakte.ru API in Perl and PHP languages,
+HVKAPI is the module for using VK.COM API in Perl language,
 which don't support (by default necessary) visual components. To use it you
 don't need any experience in web technologies or something similar. All you need 
 to do is to create an object, log in and make requests.
@@ -21,6 +21,10 @@ REQUIREMENTS
 --------------------------------------------------------------------------------
 First of all, LWP is required. Additionally you may need to install 
 LWP::Protocol::https module, otherwise all this crap will not work. 
+
+Also you'll need Net::INET6Glue::INET_is_INET6 and Net::SSLGlue::LWP
+for IPv6 supporting. If you don't need IPv6, just comment these modules in 
+HVKAPI.pm
 
 METHODS 
 --------------------------------------------------------------------------------
