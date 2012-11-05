@@ -158,7 +158,6 @@ sub login
 		$postlink = "http://m.vk.com".$postlink unless ($postlink =~ /^http/);
 
 		$response 				= $browser->post($postlink, {"code" => $mphone});
-		
 		return ('errcode' => 105,
 			'errdesc' => 'Cannot pass security check!') if ($response->decoded_content =~ /security_check/);
 
