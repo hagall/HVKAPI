@@ -15,7 +15,7 @@ package HVKAPI;
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#    Rev9, 121005
+#    Rev10, 121212
 
 use warnings;
 use strict;
@@ -175,11 +175,12 @@ sub login
 	my ($access_token, $user_id);		
 										# Т.к. мы уже залогинились за вконтакт
 										# заново вводить логпасс не нужно
-	unless ($response->decoded_content() =~ /Login success/)
+	unless ($response->previous() && $response->previous()->header("Location") =~ /access_token/)
 	{
 										# Логинимся в первый раз, нужно
 										# выставить настройки
 		my ($link) 				= $response->decoded_content() =~ /(login\.vk\.com.*?)"/;
+		print $response->decoded_content();
 		return ('errcode' => 101,
 			'errdesc' => 'Cannot parse redirect link!') unless ($link);
 			
