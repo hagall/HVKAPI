@@ -8,6 +8,9 @@
 							# an application id and useragent to be
 							# set to default values
 	my $vk = new HVKAPI(\&captchaCallback);
+
+
+	#----------------LOGIN-EXAMPLE------------------------------------	
 							# Login attempt. Die if error occured.
 	my %res = $vk->login('login', 'pass', 'phone');
 	die("Error #$res{errcode}: $res{errdesc}") if ($res{errcode});
@@ -18,7 +21,21 @@
 
 	print Dumper($resp);				# Shows the response in a structured view.
 	print $resp->{response}->[0]->{first_name};
+	#----------------------------------------------------------------
 
+
+	#-----------------REGISTRATION-EXAMPLE----------------------------
+							# Registration attempt
+	print "Trying to register...\n";
+
+	my %res = $vk->register('+79214104488', 'Vasiliy', 'Pupkin');
+	die("Error #$res{errcode}: $res{errdesc}") if ($res{errcode});
+
+	print "Sms sent.\nEnter smscode:\n";
+	my $smscode = <>;
+	%res = $vk->confirm_register("password", $smscode);
+	die("Error #$res{errcode}: $res{errdesc}") if ($res{errcode});
+	#-----------------------------------------------------------------
 
 sub captchaCallback
 {

@@ -29,15 +29,22 @@ use JSON;
 use Encode qw(encode_utf8);
 use Net::INET6Glue::INET_is_INET6;
 use Net::SSLGlue::LWP;
+use LWP::UserAgent;
 
 no  warnings;
 
 
 our $VERSION = '1.1';
-our $appId = 2256065;								# ID дефолтного приложения
 our $appSettings = 'friends,photos,audio,video,docs,notes,pages,wall,groups,messages';
 our $defaultAgent = 'Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1';
 our $defaultApiUrl = 'http://api.vk.com/api.php'; 				# URL для API-запросов
+our $appId = 2274003;								# ID оффициального vk для android
+
+# Этот блок нужен для регистрации
+our $appSecretKey = "hHbZxrka2uZ6jB1inYsH";
+our $rfirst_name;
+our $rlast_name;
+our $rphone;
 
 our @ISA = qw(Exporter);
 
@@ -211,6 +218,117 @@ sub login
 
 	return ('errcode' => 0,
 		'mid'	  => $user_id,
+		'errdesc' => '');
+
+}
+#-----------------------------------------------------------------------------------------
+#										Регистрация через API
+#										Rev8, 120720
+sub register
+{
+	my $self = shift;
+
+	my ($phone, $first_name, $last_name) =@_;
+	($rphone, $rfirst_name, $rlast_name) = @_;
+	
+	my ($app_id, $app_key,  $app_settings) 			= ($self->{api_id}, $appSecretKey, $self->{app_settings});
+	my $captchaCallback 				= $self->{captcha_callback};
+
+	($self->{mid}, $self->{access_token})		= (0, 0);
+
+	my $browser 					= LWP::UserAgent->new();
+	$browser->agent($self->{useragent});
+	$browser->cookie_jar(new HTTP::Cookies());
+	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
+	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
+	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
+									
+													
+										# Регистрация за API
+	# Сервер почему то шлет всегда 2 смс подряд. И дело не в цикле, если его убрать будет тоже самое.
+	# Это просто пиздец какой-то, так что рекомендую обрабатывать получение сразу 2х смс, притом 2ое с опазданием.
+
+	my $response;
+	while (1) {
+		$response				= $browser->get("https://api.vk.com/method/auth.signup?client_secret=$app_key".
+									"&client_id=$appId".
+									"&phone=$phone".
+									"&first_name=$first_name".
+									"&last_name=$last_name");
+		if ($response->content =~ 1112) {
+		print "Phone number being processed. Waiting and trying again...\n";
+		print $response->content;
+		sleep(1);
+		next;
+		} else {
+		last;
+		}
+		      }
+
+			
+	if ( $response->content =~ /sid/ ) {
+			return ('errcode' => 0,
+		'errdesc' => '');
+	}  
+	else {
+		print $response->content."\n";
+
+		return ('errcode' => 110,
+		'errdesc' => 'Error during registration process');
+	}
+	
+
+
+}
+#-----------------------------------------------------------------------------------------
+#										Подтверждение регистрации через API
+#										Rev8, 120720
+sub confirm_register
+{
+	my $self = shift;
+
+	my ($password, $smscode) =@_;
+	chomp($smscode);
+
+	my ($app_id, $app_key,  $app_settings) 			= ($self->{api_id}, $appSecretKey, $self->{app_settings});
+	my $captchaCallback 				= $self->{captcha_callback};
+
+	($self->{mid}, $self->{access_token})		= (0, 0);
+
+	my $browser 					= LWP::UserAgent->new();
+	$browser->agent($self->{useragent});
+	$browser->cookie_jar(new HTTP::Cookies());
+	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
+	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
+	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
+									
+													
+										# Регистрация за API
+	my $response				= $browser->get("https://api.vk.com/method/auth.confirm?client_secret=$app_key".
+									"&client_id=$appId".
+									"&phone=$rphone".
+									"&first_name=$rfirst_name".
+									"&last_name=$rlast_name".
+									"&password=$password".
+									"&code=$smscode");
+
+	my $resp = decode_json($response->content);
+
+	if ( $resp->{response}->{success} = "1" ) {
+		print "registration completed\nuid=".$resp->{response}->{uid}."\n";
+
+	}  
+	else {
+		print $response->content."\n";
+
+		return ('errcode' => 110,
+		'errdesc' => 'Error during registration process');
+	}
+	
+
+	return ('errcode' => 0,
 		'errdesc' => '');
 
 }
