@@ -32,40 +32,34 @@ use Encode qw(encode_utf8);
 #use Net::SSLGlue::LWP;
 use LWP::UserAgent;
 
-no  warnings;
 
-our $VERSION = '1.2';
-our $defaultAppId = 2256065;							# ID дефолтного приложения
-our $appSettings = 'friends,photos,audio,video,docs,notes,pages,wall,groups,messages';
-our $defaultAgent = 'Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1';
-our $defaultApiUrl = 'http://api.vk.com/api.php'; 				# URL для API-запросов
-our $appId = 2274003;								# ID оффициального vk для android
-
-# Этот блок нужен для регистрации
-our $appSecretKey = "hHbZxrka2uZ6jB1inYsH";
-our $rfirst_name;
-our $rlast_name;
-our $rphone;
+our $VERSION 		= '1.3';
+our $defaultAppId 	= 2256065;							# ID дефолтного приложения
+our $appSettings 	= 'friends,photos,audio,video,docs,notes,pages,wall,groups,messages';
+our $defaultAgent 	= 'Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1';
+our $defaultApiUrl 	= 'http://api.vk.com/api.php'; 				# URL для API-запросов
+our $defaultApiVersion 	= "5.21";						# Версия API
 
 our @ISA = qw(Exporter);
 
 #-----------------------------------------------------------------------------------------
 #										Конструктор класса.
 #										Rev3, 110329
-sub new 
+sub new
 {
 	my ($class, %args) = @_;
 	my $self  = {};
 
-	$self->{captcha_callback} = $args{captchaCallback} ? $args{captchaCallback} : 
+	$self->{captcha_callback} = $args{captchaCallback} ? $args{captchaCallback} :
 							     undef;
 	$self->{useragent} = $args{userAgent} ? $args{userAgent} : $defaultAgent;
 	$self->{app_id} = $args{appId} ? $args{appId} : $defaultAppId;
 	$self->{app_settings} = $appSettings;
 	$self->{silent} = 0;
 	$self->{timeprint} = $args{timeprint} ? $args{timeprint} : 0;
-	$self->{response_handler} = $args{responseHandler} ? $args{responseHandler} : 
+	$self->{response_handler} = $args{responseHandler} ? $args{responseHandler} :
 							     \&_defaultResponseHandler;
+	$self->{apiVersion} = $args{apiVersion} ? $args{apiVersion} : $defaultApiVersion;
 
 	$self->{api_url} = $defaultApiUrl;
 	return bless $self;
@@ -77,7 +71,7 @@ sub new
 sub _defaultResponseHandler
 {
 	my ($response, $ua, $h) = @_;
-	
+
 	die $response->status_line unless ($response->is_success || $response->is_redirect);
 }
 
@@ -89,25 +83,25 @@ sub restoreSession
 	my $self = shift;
 	my $dataref = shift;
 	($self->{access_token}, $self->{mid}) = ($dataref->{access_token}, $dataref->{mid});
-	
-						# Теперь подгружаем куки	
+
+						# Теперь подгружаем куки
 	my $cookieJar = new HTTP::Cookies();
-	
-						# Код, идущий ниже - почти копипаста с 
+
+						# Код, идущий ниже - почти копипаста с
 						# функции load модуля HTTP::Cookies
-						# В случае изменения того кода 
-						# этот код тоже необходимо будет обновить			
+						# В случае изменения того кода
+						# этот код тоже необходимо будет обновить
 	my @cookieLines = split /\n/, $dataref->{cookies};
-    	for (@cookieLines) 
+    	for (@cookieLines)
     	{
 		next unless s/^Set-Cookie3:\s*//;
 		chomp;
 		my $cookie;
-		for $cookie ($cookieJar->_split_header_words($_)) 
+		for $cookie ($cookieJar->_split_header_words($_))
 		{
 	    		my($key,$val) = splice(@$cookie, 0, 2);
 	    		my %hash;
-	    		while (@$cookie) 
+	    		while (@$cookie)
 	    		{
 				my $k = shift @$cookie;
 				my $v = shift @$cookie;
@@ -131,7 +125,7 @@ sub restoreSession
 		    				$discard);
 		}
 	}
-	
+
 	$self->{browser} = new LWP::UserAgent(agent => $self->{useragent}, timeprint => $self->{timeprint}, keep_alive => 1);
 	$self->{browser}->ssl_opts(timeprint => $self->{timeprint}, Timeprint => $self->{timeprint});
 	$self->{browser}->cookie_jar($cookieJar);
@@ -139,8 +133,8 @@ sub restoreSession
 	$self->{browser}->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
 	$self->{browser}->default_header("Accept-Encoding" 	=> "gzip, deflate");
 	$self->{browser}->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
-	
-	$self->{browser}->add_handler(response_done => $self->{response_handler});		
+
+	$self->{browser}->add_handler(response_done => $self->{response_handler});
 	return 0;
 }
 
@@ -153,11 +147,11 @@ sub getSessionVars
 	my $self = shift;
 	my $browser = $self->{browser};
 	bless $browser, 'LWP::UserAgent';
-	return { "access_token" => $self->{access_token}, 
+	return { "access_token" => $self->{access_token},
 		 "mid" 		=> $self->{mid},
-		 "cookies" 	=> $browser->cookie_jar()->as_string() 
+		 "cookies" 	=> $browser->cookie_jar()->as_string()
 		};
-	
+
 }
 
 #-----------------------------------------------------------------------------------------
@@ -167,7 +161,7 @@ sub checkSession
 {
 	my $self = shift;
 	my $response = $self->request("users.get", {"uids" => "1"});
-	return !(defined $response->{response});	
+	return !(defined $response->{response});
 }
 
 #-----------------------------------------------------------------------------------------
@@ -193,21 +187,21 @@ sub login
 	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
 	$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
 	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
-	
+
 	$browser->add_handler(response_done => $self->{response_handler});
-						
+
 										# Обычный логин ВК
 	my $response					= $browser->get("http://m.vk.com/login?fast=1");
-	my ($postlink)					= $response->decoded_content() =~ /method="post" action="(.*?)"/;	
+	my ($postlink)					= $response->decoded_content() =~ /method="post" action="(.*?)"/;
 	return ('errcode' => 106,
 	        'errdesc' => 'Cannot parse ACTION link!') unless ($postlink);
-	        
+
 	$response					= $browser->post($postlink, {"email" => $ulogin, "pass" => $upass});
 
 	while ($response->header("Location") =~ /sid=(\d+)/)
 	{
 										# Капча на логин. Такое бывает
-		return (errcode => 109, 
+		return (errcode => 109,
 			errdesc => "Houston, we have a captcha and no callback!") unless defined $self->{captcha_callback};
 
 		my $sid 	= $1;
@@ -218,35 +212,35 @@ sub login
 			    };
 		my $post = {"mail" => $ulogin, "pass" => $upass, 'captcha_sid' => $sid, 'captcha_key' => &$callback($cdata) };
 
-		$response = $browser->post($postlink, $post);		
+		$response = $browser->post($postlink, $post);
 	}
 
 	if ($response->header("Location") =~ /m=1\&/)
 	{
 										# Либо логин-пароль неверный,
-										# либо аккаунт не привязан к 
+										# либо аккаунт не привязан к
 										# мобильному. Пытаемся залогиниться через
 										# главную страницу (todo)
 		return ('errcode' => 107,
-	        	'errdesc' => 'Invalid login data!');	
+	        	'errdesc' => 'Invalid login data!');
 	}
-	
+
 	unless ($response->header("Location"))
 	{
 		return ('errcode' => 108,
 	        	'errdesc' => 'Invalid headers returned.') unless ($postlink);
 	}
-	
+
 	$response					= $browser->get($response->header("Location"));
-	
+
 	if ($response->decoded_content() =~ /security_check/)
 	{
 		return ('errcode' => 103,
 			'errdesc' => 'Holy shit! Security check!') unless ($mphone);
 
-		
+
 		my ($postlink)				= $response->decoded_content() =~ /method="post" action="(.*?)"/;
-		
+
 		return ('errcode' => 104,
 			'errdesc' => 'Cannot parse security hash link!') unless ($postlink);
 
@@ -262,12 +256,13 @@ sub login
 	}
 
 
-							
+
 										# Логин за API
 	$response 					= $browser->get("http://oauth.vk.com/oauth/authorize?client_id=$appId".
 									"&scope=$appSettings".
+									"&v=".$self->{apiVersion}.
 									"&display=wap&response_type=token");
-	my ($access_token, $user_id);		
+	my ($access_token, $user_id);
 										# Т.к. мы уже залогинились за вконтакт
 										# заново вводить логпасс не нужно
 	unless ($response->previous() && $response->previous()->header("Location") =~ /access_token/)
@@ -277,7 +272,7 @@ sub login
 		my ($link) 				= $response->decoded_content() =~ /(login\.vk\.com.*?)"/;
 		return ('errcode' => 101,
 			'errdesc' => 'Cannot parse redirect link!') unless ($link);
-			
+
 		$response				= $browser->get("https://$link");
 		if (defined $response->previous())
 		{
@@ -295,9 +290,9 @@ sub login
 
 										# Обновление cookie с m.vk.com в vk.com
 	my ($remix_sid) = $browser->cookie_jar->as_string =~ /remixsid=(\w+)/;
-	$browser->cookie_jar->set_cookie(3, "remixsid", $remix_sid, "/", "vk.com");	
+	$browser->cookie_jar->set_cookie(3, "remixsid", $remix_sid, "/", "vk.com");
 	$response					= $browser->get("http://m.vk.com/id1");
-	
+
 
 	$self->{mid} 					= $user_id;
 	$self->{access_token}				= $access_token;
@@ -305,117 +300,6 @@ sub login
 
 	return ('errcode' => 0,
 		'mid'	  => $user_id,
-		'errdesc' => '');
-
-}
-#-----------------------------------------------------------------------------------------
-#										Регистрация через API
-#										Rev8, 120720
-sub register
-{
-	my $self = shift;
-
-	my ($phone, $first_name, $last_name) =@_;
-	($rphone, $rfirst_name, $rlast_name) = @_;
-	
-	my ($app_id, $app_key,  $app_settings) 			= ($self->{api_id}, $appSecretKey, $self->{app_settings});
-	my $captchaCallback 				= $self->{captcha_callback};
-
-	($self->{mid}, $self->{access_token})		= (0, 0);
-
-	my $browser 					= LWP::UserAgent->new();
-	$browser->agent($self->{useragent});
-	$browser->cookie_jar(new HTTP::Cookies());
-	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
-	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
-	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
-									
-													
-										# Регистрация за API
-	# Сервер почему то шлет всегда 2 смс подряд. И дело не в цикле, если его убрать будет тоже самое.
-	# Это просто пиздец какой-то, так что рекомендую обрабатывать получение сразу 2х смс, притом 2ое с опазданием.
-
-	my $response;
-	while (1) {
-		$response				= $browser->get("https://api.vk.com/method/auth.signup?client_secret=$app_key".
-									"&client_id=$appId".
-									"&phone=$phone".
-									"&first_name=$first_name".
-									"&last_name=$last_name");
-		if ($response->content =~ 1112) {
-		print "Phone number being processed. Waiting and trying again...\n";
-		print $response->content;
-		sleep(1);
-		next;
-		} else {
-		last;
-		}
-		      }
-
-			
-	if ( $response->content =~ /sid/ ) {
-			return ('errcode' => 0,
-		'errdesc' => '');
-	}  
-	else {
-		print $response->content."\n";
-
-		return ('errcode' => 110,
-		'errdesc' => 'Error during registration process');
-	}
-	
-
-
-}
-#-----------------------------------------------------------------------------------------
-#										Подтверждение регистрации через API
-#										Rev8, 120720
-sub confirm_register
-{
-	my $self = shift;
-
-	my ($password, $smscode) =@_;
-	chomp($smscode);
-
-	my ($app_id, $app_key,  $app_settings) 			= ($self->{api_id}, $appSecretKey, $self->{app_settings});
-	my $captchaCallback 				= $self->{captcha_callback};
-
-	($self->{mid}, $self->{access_token})		= (0, 0);
-
-	my $browser 					= LWP::UserAgent->new();
-	$browser->agent($self->{useragent});
-	$browser->cookie_jar(new HTTP::Cookies());
-	$browser->default_header("Accept" 		=> "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-	$browser->default_header("Accept-Language" 	=> "ru-ru,ru;q=0.8,en-us;q=0.5,en;q=0.3");
-	#$browser->default_header("Accept-Encoding" 	=> "gzip, deflate");
-	$browser->default_header("Accept-Charset"	=> "utf-8;q=0.7,*;q=0.7");
-									
-													
-										# Регистрация за API
-	my $response				= $browser->get("https://api.vk.com/method/auth.confirm?client_secret=$app_key".
-									"&client_id=$appId".
-									"&phone=$rphone".
-									"&first_name=$rfirst_name".
-									"&last_name=$rlast_name".
-									"&password=$password".
-									"&code=$smscode");
-
-	my $resp = decode_json($response->content);
-
-	if ( $resp->{response}->{success} = "1" ) {
-		print "registration completed\nuid=".$resp->{response}->{uid}."\n";
-
-	}  
-	else {
-		print $response->content."\n";
-
-		return ('errcode' => 110,
-		'errdesc' => 'Error during registration process');
-	}
-	
-
-	return ('errcode' => 0,
 		'errdesc' => '');
 
 }
@@ -448,7 +332,7 @@ sub postWithCaptcha
 	my $callback 				= $self->{captcha_callback};
 
 	my ($sid, $diff, $cdata);
-	
+
 	while ($response->content =~ /captcha_sid/ or ($sid, $diff) = $response->decoded_content =~ /<!>2<!>(\d+)<!>(\d)/)
 	{
 		return undef unless (defined $callback);
@@ -488,7 +372,7 @@ sub get
 	my $browser = $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	my $response = $browser->get(@_);	
+	my $response = $browser->get(@_);
 	return $response;
 }
 
@@ -502,7 +386,7 @@ sub post
 	my $browser = $self->{browser};
 	bless $browser, "LWP::UserAgent";
 
-	my $response = $browser->post(@_);	
+	my $response = $browser->post(@_);
 	return $response;
 }
 
@@ -516,6 +400,7 @@ sub request {
 	bless $browser, "LWP::UserAgent";
 
 	$params->{"access_token"} = $self->{access_token};
+	$params->{"v"} = $self->{apiVersion};
 
 	my $response = $browser->post("https://api.vk.com/method/$method", $params);
 
